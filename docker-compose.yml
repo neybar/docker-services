@@ -1,13 +1,15 @@
 version: "3.7"
 
-##################o# Create t2_proxy network
+################### Create t2_proxy network
 # docker network create t2_proxy
 # docker network create socket_proxy
 # Alternatively, you can specify the gateway and subnet to use
 # docker network create --gateway 192.168.90.1 --subnet 192.168.90.0/24 t2_proxy
 # docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_proxy
-# Subnet range 192.168.0.0/16 covers 192.168.0.0 to 192.168.255.255######### NETWORKS
+# Subnet range 192.168.0.0/16 covers 192.168.0.0 to 192.168.255.255
 
+
+######### NETWORKS
 networks:
   t2_proxy:
     external:
@@ -313,10 +315,12 @@ services:
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
-    hostname: "pihole.$DOMAINNAME"
     restart: unless-stopped
     networks:
       - t2_proxy
+    dns:
+      - 127.0.0.1
+      - 1.1.1.1
     ports:
       - "53:53/tcp"
       - "53:53/udp"
@@ -329,6 +333,14 @@ services:
       DNS1: 1.1.1.1
       DNS2: 1.0.0.1
       ADMIN_EMAIL: $EMAIL
+      ServerIP: $HOST_IP
+      PROXY_LOCATION: pihole.$DOMAINNAME
+      DNSMASQ_USER: pihole
+      DNSSEC: "true"
+      CONDITIONAL_FORWARDING: "true"
+      CONDITIONAL_FORWARDING_IP: 192.168.0.1
+      CONDITIONAL_FORWARDING_DOMAIN: home.$DOMAINNAME
+      CONDITIONAL_FORWARDING_REVERSE: 0.168.192.in-addr.arpa
     volumes:
       - $LOCALDOCKERDIR/pihole/pihole:/etc/pihole
       - $LOCALDOCKERDIR/pihole/dnsmasq.d:/etc/dnsmasq.d
