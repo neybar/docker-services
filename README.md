@@ -23,7 +23,7 @@ So far this is the list of things that I'm serving:
 
 * Plex (currently hosted on Synology)
 * SabNZB (also on Synology)
-* (https://ombi.io/)[https://ombi.io/]
+* [https://ombi.io/](https://ombi.io/)
 * OwnCloud / NextCloud / etc
 * HomeBridge for HomeKit
 * Unifi Controller (currently hosted on Synology)
@@ -44,8 +44,8 @@ So far this is the list of things that I'm serving:
 * Update the values in `.env`.  I'm using cloudflare for DNS.  See [https://www.smarthomebeginner.com/traefik-2-docker-tutorial/#4_Proper_DNS_Records](https://www.smarthomebeginner.com/traefik-2-docker-tutorial/#4_Proper_DNS_Records)
 * I have two config directories.  Things that aren't as finicky go on a NFS mount (to my synology).  Something just don't play nice with being on a network mount.  So I have another directory for those configs.  Ergo $DOCKERDIR and $LOCALDOCKERDIR.
 * Also I have my synology SMB mounted with the following attributes: `//$IP/audiobooks /mnt/audiobooks cifs user,vers=3.0,uid=$USER,gid=$GROUP,rw,suid,nobrl,file_mode=0600,dir_mode=0700,credentials=/etc/cifspwd 0 0`.  Replace `$IP,$USER,$GROUP` with the correct values.
-* Create networks:
-** ```
+* Create networks:   
+```
 # docker network create t2_proxy
 # docker network create socket_proxy
 # Alternatively, you can specify the gateway and subnet to use
