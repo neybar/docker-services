@@ -1,2 +1,0 @@
-0 15 * * * /home/jalance/Projects/docker-services/minecraft/backup.sh >> /home/jalance/games/minecraft_spigot/backup/backup.log 2>&1
-20 23 * * * /home/jalance/Projects/docker-services/minecraft/clean_backup.sh >> /home/jalance/games/minecraft_spigot/backup/backup.log 2>&1
