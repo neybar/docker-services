@@ -18,6 +18,7 @@ So far this is the list of things that I'm serving:
 * Calibre-Web
 * Lazy Librarian
 * PiHole
+* Docker Socket Proxy
 
 ## TODO
 
