@@ -66,3 +66,10 @@ docker network create --gateway 192.168.90.1 --subnet 192.168.90.0/24 t2_proxy
 ### pihole
 
 * `touch pihole/pihole.log`
+
+### portainer
+
+* After running for the first time, add a new docker endpoint and set the url to socket-proxy:2375
+* Settings -> Endpoints -> Add Endpoint -> Docker.
+* Fill in "Endpoint URL" with `socket-proxy:2375` and give it a name
+* Not sure if this is required but I removed the "primary" endpoint since the docker.sock was not available any more

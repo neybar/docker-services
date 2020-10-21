@@ -34,6 +34,8 @@ services:
     container_name: traefik
     image: traefik:2.2.1 # the chevrotin tag refers to v2.2.x but introduced a breaking change in 2.2.2
     restart: unless-stopped
+    depends_on:
+      - socket-proxy
     command: # CLI arguments
       - --global.checkNewVersion=true
       - --global.sendAnonymousUsage=true
@@ -53,7 +55,8 @@ services:
       - --accessLog.bufferingSize=100 # Configuring a buffer of 100 lines
       - --accessLog.filters.statusCodes=400-499
       - --providers.docker=true
-      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      # - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
       - --providers.docker.defaultrule=Host(`{{ index .Labels "com.docker.compose.service" }}.$DOMAINNAME`)
       - --providers.docker.exposedByDefault=false
       - --providers.docker.network=t2_proxy
@@ -69,8 +72,7 @@ services:
     networks:
       t2_proxy:
         ipv4_address: 192.168.90.254 # You can specify a static IP
-#    networks:
-#      - t2_proxy
+      socket_proxy:
     security_opt:
       - no-new-privileges:true
     ports:
@@ -92,7 +94,6 @@ services:
         mode: host
     volumes:
       - $DOCKERDIR/traefik2/rules:/rules 
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - $DOCKERDIR/traefik2/acme/acme.json:/acme.json 
       - $DOCKERDIR/traefik2/traefik.log:/traefik.log 
       - $DOCKERDIR/shared:/shared
@@ -121,6 +122,29 @@ services:
       # - "traefik.http.routers.traefik-rtr.middlewares=chain-basic-auth@file" 
       - "traefik.http.routers.traefik-rtr.middlewares=chain-authelia@file"
 
+  # Docker Socket Proxy - Security Enchanced Proxy for Docker Socket
+  socket-proxy:
+    container_name: socket-proxy
+    image: fluencelabs/docker-socket-proxy
+    restart: always
+    networks:
+      socket_proxy:
+        ipv4_address: 192.168.91.254 # You can specify a static IP
+    privileged: true
+    ports:
+      - "127.0.0.1:2375:2375" # Port 2375 should only ever get exposed to the internal network.
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - LOG_LEVEL=info # debug,info,notice,warning,err,crit,alert,emerg
+      - CONTAINERS=1
+      - INFO=1
+      - IMAGES=1
+      - VOLUMES=1
+      - NETWORKS=1
+      - SERVICES=1
+      - TASKS=1
+
   # Authelia (Lite) - Self-Hosted Single Sign-On and Two-Factor Authentication
   authelia:
     container_name: authelia
@@ -129,7 +153,8 @@ services:
     restart: always
     networks:
       - t2_proxy
-    # depends_on:
+    depends_on:
+      - traefik
     #   - mariadb
     #   - redis
     expose:
@@ -165,20 +190,20 @@ services:
   # Portainer - WebUI for Containers
   portainer:
     container_name: portainer
-    image: portainer/portainer:latest
+    image: portainer/portainer-ce:latest
     restart: unless-stopped
-    command: -H unix:///var/run/docker.sock
+    depends_on: 
+      - socket-proxy
+      - traefik
     networks:
       - t2_proxy
+      - socket_proxy
     security_opt:
       - no-new-privileges:true
-#    ports:
-#      - "$PORTAINER_PORT:9000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - $DOCKERDIR/portainer/data:/data 
     environment:
-      - TZ=$TZ
+      TZ: $TZ
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -196,6 +221,8 @@ services:
     container_name: organizr
     image: organizrtools/organizr-v2:latest
     restart: unless-stopped
+    depends_on:
+      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -226,6 +253,8 @@ services:
     container_name: medusa
     image: linuxserver/medusa:latest
     restart: unless-stopped
+    depends_on: 
+      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -255,6 +284,8 @@ services:
     image: linuxserver/calibre-web
     container_name: calibre-web
     restart: unless-stopped
+    depends_on: 
+      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -284,6 +315,8 @@ services:
     image: linuxserver/lazylibrarian
     container_name: lazylibrarian
     restart: unless-stopped
+    depends_on: 
+      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -316,6 +349,8 @@ services:
     container_name: pihole
     image: pihole/pihole:latest
     restart: unless-stopped
+    depends_on: 
+      - traefik
     networks:
       - t2_proxy
     dns:
