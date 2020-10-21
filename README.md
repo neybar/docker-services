@@ -19,6 +19,7 @@ So far this is the list of things that I'm serving:
 * Lazy Librarian
 * PiHole
 * Docker Socket Proxy
+* Garbage Collection
 
 ## TODO
 
@@ -31,7 +32,7 @@ So far this is the list of things that I'm serving:
 * Radarr
 * Lidarr
 * Watchtower
-* Garbage Collection
+* GitLab
 
 ## Maybe
 

@@ -153,10 +153,6 @@ services:
     restart: always
     networks:
       - t2_proxy
-    depends_on:
-      - traefik
-    #   - mariadb
-    #   - redis
     expose:
       - 9091
     volumes:
@@ -194,7 +190,6 @@ services:
     restart: unless-stopped
     depends_on: 
       - socket-proxy
-      - traefik
     networks:
       - t2_proxy
       - socket_proxy
@@ -216,13 +211,33 @@ services:
       - "traefik.http.routers.portainer-rtr.service=portainer-svc"
       - "traefik.http.services.portainer-svc.loadbalancer.server.port=9000"
 
-# Organizr - Unified Frontend
+  # Docker-GC - Automatic Docker Garbage Collection
+  # Create docker-gc-exclude file
+  dockergc:
+    image: clockworksoul/docker-gc-cron:latest
+    container_name: dockergc
+    restart: unless-stopped
+    networks:
+      - socket_proxy
+    depends_on:
+      - socket-proxy
+    volumes:
+      - $DOCKERDIR/docker-gc/docker-gc-exclude:/etc/docker-gc-exclude
+    environment:
+      CRON: 0 0 0 * * ? # Everyday at midnight.
+      FORCE_IMAGE_REMOVAL: 1
+      FORCE_CONTAINER_REMOVAL: 0
+      GRACE_PERIOD_SECONDS: 604800
+      DRY_RUN: 0
+      CLEAN_UP_VOLUMES: 1
+      TZ: $TZ
+      DOCKER_HOST: tcp://socket-proxy:2375
+
+  # Organizr - Unified Frontend
   organizr:
     container_name: organizr
     image: organizrtools/organizr-v2:latest
     restart: unless-stopped
-    depends_on:
-      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -253,8 +268,6 @@ services:
     container_name: medusa
     image: linuxserver/medusa:latest
     restart: unless-stopped
-    depends_on: 
-      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -284,8 +297,6 @@ services:
     image: linuxserver/calibre-web
     container_name: calibre-web
     restart: unless-stopped
-    depends_on: 
-      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -315,8 +326,6 @@ services:
     image: linuxserver/lazylibrarian
     container_name: lazylibrarian
     restart: unless-stopped
-    depends_on: 
-      - traefik
     networks:
       - t2_proxy
     security_opt:
@@ -349,8 +358,6 @@ services:
     container_name: pihole
     image: pihole/pihole:latest
     restart: unless-stopped
-    depends_on: 
-      - traefik
     networks:
       - t2_proxy
     dns:
