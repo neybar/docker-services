@@ -33,7 +33,6 @@ services:
   traefik:
     container_name: traefik
     image: traefik:2.2.1 # the chevrotin tag refers to v2.2.x but introduced a breaking change in 2.2.2
-    image: traefik:2.4.5
     restart: unless-stopped
     depends_on:
       - socket-proxy
