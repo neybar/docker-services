@@ -33,6 +33,7 @@ services:
   traefik:
     container_name: traefik
     image: traefik:2.2.1 # the chevrotin tag refers to v2.2.x but introduced a breaking change in 2.2.2
+    image: traefik:2.4.5
     restart: unless-stopped
     depends_on:
       - socket-proxy
@@ -236,7 +237,8 @@ services:
   # Organizr - Unified Frontend
   organizr:
     container_name: organizr
-    image: organizrtools/organizr-v2:latest
+    hostname: organizr
+    image: organizr/organizr
     restart: unless-stopped
     networks:
       - t2_proxy
@@ -356,6 +358,7 @@ services:
   # Verify that port 53 is available: https://www.linuxuprising.com/2020/07/ubuntu-how-to-free-up-port-53-used-by.html
   pihole:
     container_name: pihole
+    hostname: pihole
     image: pihole/pihole:latest
     restart: unless-stopped
     networks:
