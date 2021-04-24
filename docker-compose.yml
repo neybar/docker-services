@@ -267,7 +267,7 @@ services:
   # Medusa - TV Show downloader / organizer
   medusa:
     container_name: medusa
-    image: linuxserver/medusa:latest
+    image: ghcr.io/linuxserver/medusa:latest
     restart: unless-stopped
     networks:
       - t2_proxy
@@ -293,9 +293,66 @@ services:
       - "traefik.http.routers.medusa-rtr.service=medusa-svc"
       - "traefik.http.services.medusa-svc.loadbalancer.server.port=8081"
 
+  # couchpotato - Movie Show downloader / organizer
+  couchpotato:
+    container_name: couchpotato
+    image: ghcr.io/linuxserver/couchpotato:latest
+    restart: unless-stopped
+    networks:
+      - t2_proxy
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - $DOCKERDIR/couchpotato:/config
+      - $SYNOLOGYDIR/downloads/movies:/downloads
+      - $SYNOLOGYDIR/video/Movies:/movies
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.couchpotato-rtr.entrypoints=https"
+      - "traefik.http.routers.couchpotato-rtr.rule=Host(`cp.$DOMAINNAME`)" 
+      - "traefik.http.routers.couchpotato-rtr.tls=true"
+      ## Middlewares
+      - 'traefik.http.routers.couchpotato-rtr.middlewares=chain-authelia@file'
+      ## HTTP Services
+      - "traefik.http.routers.couchpotato-rtr.service=couchpotato-svc"
+      - "traefik.http.services.couchpotato-svc.loadbalancer.server.port=5050"
+
+  # hydra - NZB indexer search
+  hydra:
+    container_name: hydra
+    image: ghcr.io/linuxserver/nzbhydra2:latest
+    restart: unless-stopped
+    networks:
+      - t2_proxy
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - $DOCKERDIR/hydra:/config
+      - $SYNOLOGYDIR/downloads:/downloads
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.hydra-rtr.entrypoints=https"
+      - "traefik.http.routers.hydra-rtr.rule=Host(`hydra.$DOMAINNAME`)" 
+      - "traefik.http.routers.hydra-rtr.tls=true"
+      ## Middlewares
+      - 'traefik.http.routers.hydra-rtr.middlewares=chain-authelia@file'
+      ## HTTP Services
+      - "traefik.http.routers.hydra-rtr.service=hydra-svc"
+      - "traefik.http.services.hydra-svc.loadbalancer.server.port=5076"
+
   # Calibre Web - interface to book library
   calibre-web:
-    image: linuxserver/calibre-web
+    image: ghcr.io/linuxserver/calibre-web
     container_name: calibre-web
     restart: unless-stopped
     networks:
@@ -324,7 +381,7 @@ services:
 
   # Lazy Librarian - book indexer and download manager
   lazylibrarian:
-    image: linuxserver/lazylibrarian
+    image: ghcr.io/linuxserver/lazylibrarian
     container_name: lazylibrarian
     restart: unless-stopped
     networks:
