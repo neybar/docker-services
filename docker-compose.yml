@@ -85,6 +85,11 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/lazylibrarian
+  isponsorblocktv_config:
+    driver_opts:
+      type: nfs
+      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      device: :/volume1/docker/isponsorblocktv
   video:
     driver_opts:
       type: nfs
@@ -145,6 +150,7 @@ services:
 #      - --api.insecure=true
 #      - --serversTransport.insecureSkipVerify=true
       - --log=true
+      # - --log.level=DEBUG # (Default: error) DEBUG, INFO, WARN, ERROR, FATAL, PANIC
       - --log.level=ERROR # (Default: error) DEBUG, INFO, WARN, ERROR, FATAL, PANIC
       - --accessLog=true
       - --accessLog.filePath=/config/traefik.log
@@ -365,6 +371,21 @@ services:
       ## HTTP Services
       - "traefik.http.routers.organizr-rtr.service=organizr-svc"
       - "traefik.http.services.organizr-svc.loadbalancer.server.port=80"
+
+  # iSponsorBlockTV - YouTube auto blocker
+  iSponsorBlockTV:
+    container_name: isponsorblocktv
+    image: ghcr.io/dmunozv04/isponsorblocktv
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - isponsorblocktv_config:/app/data
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
 
   # Plex - Media Server
   plex:
