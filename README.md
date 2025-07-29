@@ -17,19 +17,26 @@ So far this is the list of things that I'm serving:
 * Medusa
 * Calibre-Web
 * Lazy Librarian
-* PiHole
+* PiHole -- Still in place, but I'm using NextDNS now.
+* Plex
+* SabNZB
+* Sonarr
+* Radarr
+* Hydra
+* Bazarr
+* iSponsorBlockTV
+* Home Assistant
 * Docker Socket Proxy
 * Garbage Collection
 
 ## TODO
 
-* Plex (currently hosted on Synology)
-* SabNZB (also on Synology)
+* ~Plex (currently hosted on Synology)~
+* ~SabNZB (also on Synology)~
 * [https://ombi.io/](https://ombi.io/)
 * OwnCloud / NextCloud / etc
-* HomeBridge for HomeKit
-* Unifi Controller (currently hosted on Synology)
-* Radarr
+* HomeBridge for HomeKit (currently hosted on Synology)
+* ~Radarr~
 * Lidarr
 * Watchtower
 * GitLab
