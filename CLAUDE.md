@@ -23,9 +23,6 @@ docker compose restart <service-name>
 
 # Stop all services
 docker compose down
-
-# Start LibrePhotos (separate compose file)
-docker compose -f librephoto.yml up -d
 ```
 
 ## Architecture
@@ -54,7 +51,6 @@ docker compose -f librephoto.yml up -d
 ## Key Configuration Files
 
 - `docker-compose.yml` - Main service definitions
-- `librephoto.yml` - LibrePhotos stack (separate due to complexity)
 - `env.example` - Required environment variables template (copy to `.env`)
 - `acme/acme.json` - Let's Encrypt certificates (Traefik managed)
 - `pihole/` - Pi-hole DNS configuration
