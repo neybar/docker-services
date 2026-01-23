@@ -250,12 +250,14 @@ services:
       - LOG_LEVEL=warning # debug,info,notice,warning,err,crit,alert,emerg
       - CONTAINERS=1
       - POST=1 # Required for start/stop/restart operations
+      - DELETE=1 # Required for docker-gc to delete images/containers
       - INFO=1
       - IMAGES=1
       - VOLUMES=1
       - NETWORKS=1
       - SERVICES=1
       - TASKS=1
+      - SYSTEM=1 # Required for docker system df
 
   # Authelia (Lite) - Self-Hosted Single Sign-On and Two-Factor Authentication
   authelia:
@@ -312,7 +314,7 @@ services:
       - portainer_config:/data
     environment:
       - TZ=$TZ
-      - DOCKER_HOST="tcp://socket-proxy:2375"
+      - DOCKER_HOST=tcp://socket-proxy:2375
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -326,26 +328,18 @@ services:
       - "traefik.http.services.portainer-svc.loadbalancer.server.port=9000"
 
   # Docker-GC - Automatic Docker Garbage Collection
-  # Create docker-gc-exclude file
+  # Runs daily at midnight, removes images/containers/volumes older than 7 days
   dockergc:
-    image: clockworksoul/docker-gc-cron:latest
+    build: $LOCALDOCKERDIR/docker-gc
     container_name: dockergc
     restart: unless-stopped
     networks:
       - socket_proxy
     depends_on:
       - socket-proxy
-    volumes:
-      - $LOCALDOCKERDIR/docker-gc/docker-gc-exclude:/etc/docker-gc-exclude
     environment:
-      - CRON="0 0 0 * * ?" # Everyday at midnight.
-      - FORCE_IMAGE_REMOVAL="1"
-      - FORCE_CONTAINER_REMOVAL="0"
-      - GRACE_PERIOD_SECONDS="604800"
-      - DRY_RUN="0"
-      - CLEAN_UP_VOLUMES="1"
       - TZ=$TZ
-      - DOCKER_HOST="tcp://socket-proxy:2375"
+      - DOCKER_HOST=tcp://socket-proxy:2375
 
   # Organizr - Unified Frontend
   organizr:
