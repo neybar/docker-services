@@ -75,6 +75,27 @@ Critical variables in `.env`:
 5. Create NFS volume in volumes section if config persistence needed
 6. Reference existing services (e.g., sonarr, radarr) as templates
 
+## Git Workflow
+
+**IMPORTANT: Never commit directly to master.**
+
+All changes must be made in a feature branch:
+1. If the user hasn't specified a branch name, suggest a descriptive one (e.g., `fix-portainer-permissions`, `add-new-service`)
+2. Create the branch before making any changes
+3. Commit changes to the branch
+4. Push the branch to remote
+5. Offer to create a pull request when changes are complete
+
+Example workflow:
+```bash
+git checkout -b feature-branch-name
+# Make changes...
+git add .
+git commit -m "descriptive message"
+git push -u origin feature-branch-name
+# Create PR via gh cli or web interface
+```
+
 ## Notes
 
 - Pi-hole runs on host port 53 - may conflict with systemd-resolved
