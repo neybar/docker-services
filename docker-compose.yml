@@ -249,6 +249,7 @@ services:
     environment:
       - LOG_LEVEL=warning # debug,info,notice,warning,err,crit,alert,emerg
       - CONTAINERS=1
+      - POST=1 # Required for start/stop/restart operations
       - INFO=1
       - IMAGES=1
       - VOLUMES=1
