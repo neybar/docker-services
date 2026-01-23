@@ -90,6 +90,11 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/isponsorblocktv
+  smokeping_config:
+    driver_opts:
+      type: nfs
+      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      device: :/volume1/docker/smokeping
   video:
     driver_opts:
       type: nfs
@@ -133,7 +138,7 @@ services:
   # Traefik 2 - Reverse Proxy
   traefik:
     container_name: traefik
-    image: traefik:2.4.5
+    image: traefik:v2.11
     restart: unless-stopped
     depends_on:
       - socket-proxy
@@ -725,3 +730,31 @@ services:
       ## HTTP Services
       - "traefik.http.routers.pihole-rtr.service=pihole-svc"
       - "traefik.http.services.pihole-svc.loadbalancer.server.port=80"
+
+  # SmokePing - Network Latency Monitoring
+  smokeping:
+    container_name: smokeping
+    image: lscr.io/linuxserver/smokeping:latest
+    restart: unless-stopped
+    networks:
+      - t2_proxy
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - smokeping_config:/config
+      - smokeping_config:/data
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.smokeping-rtr.entrypoints=https"
+      - "traefik.http.routers.smokeping-rtr.rule=Host(`smokeping.$DOMAINNAME`)"
+      - "traefik.http.routers.smokeping-rtr.tls=true"
+      ## Middlewares
+      - 'traefik.http.routers.smokeping-rtr.middlewares=chain-authelia@file'
+      ## HTTP Services
+      - "traefik.http.routers.smokeping-rtr.service=smokeping-svc"
+      - "traefik.http.services.smokeping-svc.loadbalancer.server.port=80"
