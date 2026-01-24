@@ -44,11 +44,11 @@ tar -czf /tmp/traefik2-backup-$(date +%Y%m%d).tar.gz /mnt/docker/traefik2/
 ---
 
 ### Task 4: Commit Traefik v3 changes to feature branch
-- [ ] Create branch: `git checkout -b upgrade-traefik-v3`
-- [ ] Create backup: `cp docker-compose.yml docker-compose.yml.backup`
-- [ ] Stage changes: `git add docker-compose.yml`
-- [ ] Commit with message (see below)
-- [ ] Push branch: `git push -u origin upgrade-traefik-v3`
+- [x] Create branch: `git checkout -b upgrade-traefik-v3`
+- [x] Create backup: `cp docker-compose.yml docker-compose.yml.backup`
+- [x] Stage changes: `git add docker-compose.yml`
+- [x] Commit with message (see below)
+- [x] Push branch: `git push -u origin upgrade-traefik-v3`
 
 **Commit message:**
 ```
