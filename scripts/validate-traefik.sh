@@ -20,7 +20,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Load domain from .env if not provided as argument
+# Load domain and host IP from .env if not provided as argument
 if [[ $# -ge 1 ]]; then
     DOMAIN="$1"
 elif [[ -f "$PROJECT_DIR/.env" ]]; then
@@ -36,6 +36,17 @@ if [[ -z "$DOMAIN" ]]; then
     exit 1
 fi
 
+# Load HOST_IP for local resolution (bypasses public DNS, enables Authelia local bypass)
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+    HOST_IP=$(grep -E "^HOST_IP=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
+fi
+
+if [[ -z "${HOST_IP:-}" ]]; then
+    echo -e "${YELLOW}Warning: HOST_IP not set, using public DNS (may trigger Authelia auth)${NC}"
+else
+    echo -e "${GREEN}Using local resolution: ${HOST_IP}${NC}"
+fi
+
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Traefik v3 Validation Script${NC}"
 echo -e "${BLUE}  Domain: ${DOMAIN}${NC}"
@@ -47,25 +58,25 @@ PASSED=0
 FAILED=0
 WARNINGS=0
 
-# Service definitions: name:subdomain (subdomain defaults to name if not specified)
+# Service definitions: "subdomain" or "subdomain:/path" for custom test paths
 SERVICES=(
     "traefik"
     "authelia"
     "plex"
     "portainer"
-    "start"        # Organizr
+    "start"              # Organizr
     "sonarr"
     "radarr"
     "bazarr"
     "sabnzb"
     "hydra"
-    "books"        # Calibre-Web
+    "books"              # Calibre-Web
     "lazylib"
     "homeassistant"
-    "pihole"
+    "pihole:/admin/"     # Pi-hole blocks root, test admin path
     "smokeping"
     "homebridge"
-    "home"         # DSM (Synology)
+    "home"               # DSM (Synology)
 )
 
 # Function to print test result
@@ -91,11 +102,17 @@ print_result() {
 # Function to test HTTP status code
 test_http_status() {
     local url="$1"
-    local expected="${2:-200}"
-    local timeout="${3:-10}"
+    local host="$2"
+    local expected="${3:-200}"
+    local timeout="${4:-10}"
 
     local status
-    status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$timeout" -k "$url" 2>/dev/null) || status="000"
+    if [[ -n "${HOST_IP:-}" ]]; then
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$timeout" -k \
+            --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null) || status="000"
+    else
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$timeout" -k "$url" 2>/dev/null) || status="000"
+    fi
 
     if [[ "$status" == "$expected" ]]; then
         return 0
@@ -109,10 +126,15 @@ test_http_status() {
 check_header() {
     local url="$1"
     local header="$2"
-    local timeout="${3:-10}"
+    local host="$3"
+    local timeout="${4:-10}"
 
     local headers
-    headers=$(curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null)
+    if [[ -n "${HOST_IP:-}" ]]; then
+        headers=$(curl -s -I --max-time "$timeout" -k --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null)
+    else
+        headers=$(curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null)
+    fi
 
     if echo "$headers" | grep -qi "^$header:"; then
         return 0
@@ -125,24 +147,46 @@ check_header() {
 get_header() {
     local url="$1"
     local header="$2"
-    local timeout="${3:-10}"
+    local host="$3"
+    local timeout="${4:-10}"
 
-    curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
+    if [[ -n "${HOST_IP:-}" ]]; then
+        curl -s -I --max-time "$timeout" -k --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
+    else
+        curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
+    fi
 }
 
 echo -e "${BLUE}1. Testing Service Accessibility${NC}"
 echo "   Testing ${#SERVICES[@]} services..."
 echo ""
 
-for service in "${SERVICES[@]}"; do
-    url="https://${service}.${DOMAIN}"
+for service_def in "${SERVICES[@]}"; do
+    # Parse service definition: "subdomain" or "subdomain:/path"
+    if [[ "$service_def" == *":"* ]]; then
+        service="${service_def%%:*}"
+        path="${service_def#*:}"
+    else
+        service="$service_def"
+        path=""
+    fi
 
-    # Get HTTP status code
-    status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k "$url" 2>/dev/null) || status="000"
+    url="https://${service}.${DOMAIN}${path}"
+    host="${service}.${DOMAIN}"
 
-    # 2xx and 3xx are success, 4xx and 5xx are failures
+    # Get HTTP status code (use local resolution if HOST_IP is set)
+    if [[ -n "${HOST_IP:-}" ]]; then
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k \
+            --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null) || status="000"
+    else
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k "$url" 2>/dev/null) || status="000"
+    fi
+
+    # 2xx, 3xx = success; 401 = service reachable (has own auth); 4xx/5xx = failure
     if [[ "$status" =~ ^[23] ]]; then
         print_result "$service ($url)" "PASS" "HTTP $status"
+    elif [[ "$status" == "401" ]]; then
+        print_result "$service ($url)" "PASS" "HTTP $status (service has own auth)"
     elif [[ "$status" == "000" ]]; then
         print_result "$service ($url)" "FAIL" "Connection failed"
     else
@@ -156,7 +200,13 @@ echo ""
 
 # Test HTTP redirect (should get 308 Permanent Redirect)
 http_url="http://${SERVICES[0]}.${DOMAIN}"
-redirect_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$http_url" 2>/dev/null) || redirect_status="000"
+redirect_host="${SERVICES[0]}.${DOMAIN}"
+if [[ -n "${HOST_IP:-}" ]]; then
+    redirect_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+        --resolve "${redirect_host}:80:${HOST_IP}" "$http_url" 2>/dev/null) || redirect_status="000"
+else
+    redirect_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$http_url" 2>/dev/null) || redirect_status="000"
+fi
 
 if [[ "$redirect_status" == "308" ]]; then
     print_result "HTTP->HTTPS redirect (308 Permanent)" "PASS"
@@ -174,14 +224,15 @@ echo ""
 
 # Test Permissions-Policy header (formerly Feature-Policy)
 test_url="https://traefik.${DOMAIN}"
+test_host="traefik.${DOMAIN}"
 
-if check_header "$test_url" "Permissions-Policy"; then
-    policy=$(get_header "$test_url" "Permissions-Policy")
+if check_header "$test_url" "Permissions-Policy" "$test_host"; then
+    policy=$(get_header "$test_url" "Permissions-Policy" "$test_host")
     print_result "Permissions-Policy header present" "PASS"
     echo -e "         Value: $policy"
 else
     # Check for old Feature-Policy (indicates v2 still running)
-    if check_header "$test_url" "Feature-Policy"; then
+    if check_header "$test_url" "Feature-Policy" "$test_host"; then
         print_result "Permissions-Policy header" "FAIL" "Found Feature-Policy instead (Traefik v2 still running?)"
     else
         print_result "Permissions-Policy header" "FAIL" "Header not found"
@@ -189,19 +240,19 @@ else
 fi
 
 # Test other security headers
-if check_header "$test_url" "Strict-Transport-Security"; then
+if check_header "$test_url" "Strict-Transport-Security" "$test_host"; then
     print_result "Strict-Transport-Security (HSTS)" "PASS"
 else
     print_result "Strict-Transport-Security (HSTS)" "WARN" "Header not found"
 fi
 
-if check_header "$test_url" "X-Content-Type-Options"; then
+if check_header "$test_url" "X-Content-Type-Options" "$test_host"; then
     print_result "X-Content-Type-Options" "PASS"
 else
     print_result "X-Content-Type-Options" "WARN" "Header not found"
 fi
 
-if check_header "$test_url" "X-Frame-Options"; then
+if check_header "$test_url" "X-Frame-Options" "$test_host"; then
     print_result "X-Frame-Options" "PASS"
 else
     print_result "X-Frame-Options" "WARN" "Header not found"
@@ -212,7 +263,8 @@ echo -e "${BLUE}4. Testing TLS Certificate${NC}"
 echo ""
 
 # Check certificate validity
-cert_info=$(echo | openssl s_client -servername "traefik.${DOMAIN}" -connect "traefik.${DOMAIN}:443" 2>/dev/null | openssl x509 -noout -dates 2>/dev/null)
+cert_connect="${HOST_IP:-traefik.${DOMAIN}}:443"
+cert_info=$(echo | openssl s_client -servername "traefik.${DOMAIN}" -connect "$cert_connect" 2>/dev/null | openssl x509 -noout -dates 2>/dev/null)
 
 if [[ -n "$cert_info" ]]; then
     not_after=$(echo "$cert_info" | grep "notAfter" | cut -d'=' -f2)
@@ -230,7 +282,7 @@ if [[ -n "$cert_info" ]]; then
     fi
 
     # Check if it's a wildcard cert
-    cert_subject=$(echo | openssl s_client -servername "traefik.${DOMAIN}" -connect "traefik.${DOMAIN}:443" 2>/dev/null | openssl x509 -noout -subject 2>/dev/null)
+    cert_subject=$(echo | openssl s_client -servername "traefik.${DOMAIN}" -connect "$cert_connect" 2>/dev/null | openssl x509 -noout -subject 2>/dev/null)
     if echo "$cert_subject" | grep -q "\*\.${DOMAIN}"; then
         print_result "Wildcard certificate (*.${DOMAIN})" "PASS"
     fi
@@ -243,7 +295,8 @@ echo -e "${BLUE}5. Testing Traefik Dashboard${NC}"
 echo ""
 
 dashboard_url="https://traefik.${DOMAIN}/dashboard/"
-if result=$(test_http_status "$dashboard_url" "200" 15); then
+dashboard_host="traefik.${DOMAIN}"
+if result=$(test_http_status "$dashboard_url" "$dashboard_host" "200" 15); then
     print_result "Traefik dashboard accessible" "PASS"
 else
     if [[ "$result" =~ ^30[2378]$ ]]; then
@@ -255,8 +308,13 @@ fi
 
 # Check API endpoint
 api_url="https://traefik.${DOMAIN}/api/version"
-if result=$(test_http_status "$api_url" "200" 10); then
-    version=$(curl -s -k "$api_url" 2>/dev/null | grep -o '"Version":"[^"]*"' | cut -d'"' -f4)
+api_host="traefik.${DOMAIN}"
+if result=$(test_http_status "$api_url" "$api_host" "200" 10); then
+    if [[ -n "${HOST_IP:-}" ]]; then
+        version=$(curl -s -k --resolve "${api_host}:443:${HOST_IP}" "$api_url" 2>/dev/null | grep -o '"Version":"[^"]*"' | cut -d'"' -f4)
+    else
+        version=$(curl -s -k "$api_url" 2>/dev/null | grep -o '"Version":"[^"]*"' | cut -d'"' -f4)
+    fi
     if [[ -n "$version" ]]; then
         print_result "Traefik API responding" "PASS"
         echo -e "         Version: $version"
