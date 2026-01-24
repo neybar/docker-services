@@ -75,6 +75,7 @@ SERVICES=(
     "homeassistant"
     "pihole:/admin/"     # Pi-hole blocks root, test admin path
     "smokeping"
+    "speedtest"          # LibreSpeed
     "homebridge"
     "home"               # DSM (Synology)
 )

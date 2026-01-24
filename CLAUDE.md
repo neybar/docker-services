@@ -74,6 +74,29 @@ Critical variables in `.env`:
 4. Use `chain-authelia@file` middleware for authentication
 5. Create NFS volume in volumes section if config persistence needed
 6. Reference existing services (e.g., sonarr, radarr) as templates
+7. Add the new service subdomain to `scripts/validate-traefik.sh` SERVICES array
+8. Run the validation script (see Validation section below)
+
+## Validation
+
+**IMPORTANT: Always run the validation script after modifying `docker-compose.yml`.**
+
+```bash
+# Run validation (reads domain from .env)
+./scripts/validate-traefik.sh
+
+# Or specify domain explicitly
+./scripts/validate-traefik.sh yourdomain.com
+```
+
+The script validates:
+- All services are accessible via HTTPS
+- HTTP to HTTPS redirect is working
+- Security headers are present
+- TLS certificate is valid
+- Traefik dashboard and API are responding
+
+When adding a new service, add its subdomain to the `SERVICES` array in `scripts/validate-traefik.sh`.
 
 ## Log Management
 
