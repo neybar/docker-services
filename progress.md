@@ -277,15 +277,54 @@ Upgrading Traefik reverse proxy from v2.11 to v3.6 with backward compatibility m
 
 **Issues Encountered:** None
 
-**Next Recommended Task:** Task 10 - Investigate Permissions-Policy header, or wait for Task 7 24-hour checkpoint
+**Next Recommended Task:** Task 7 24-hour checkpoint (2026-01-25 03:37 UTC)
+
+---
+
+### Task 10: Investigate Permissions-Policy header not appearing ⚠️ BLOCKED
+**Investigated:** 2026-01-24 04:00-04:25 UTC
+**Status:** Blocked by NFS caching issue
+
+**Investigation Summary:**
+
+**Root Cause:** Synology NFS server caching is returning stale file contents to Traefik's file provider.
+
+**What Was Tried:**
+1. ✅ Verified volume now correctly points to `traefik3` directory
+2. ✅ Confirmed file content inside container shows correct `permissionsPolicy` setting
+3. ✅ Recreated Docker NFS volume multiple times
+4. ✅ Restarted Traefik container with fresh volume
+5. ✅ Deleted and recreated middlewares.yml with new inode
+6. ✅ Added `Permissions-Policy` to `customResponseHeaders` as workaround
+7. ✅ Enabled DEBUG logging to trace file provider behavior
+
+**Key Finding:**
+- `docker exec traefik cat /config/rules/middlewares.yml` shows **correct** content (permissionsPolicy)
+- Traefik's configuration watcher logs show **old** content (featurePolicy, sslRedirect: true)
+- The NFS mount is returning different data to Traefik's Go file reader than to shell commands
+- This appears to be a Synology NFS server-side caching issue
+
+**Impact:**
+- Permissions-Policy header not present in responses
+- Other security headers (HSTS, X-Content-Type-Options, etc.) are working
+- Non-blocking issue - does not affect core functionality
+
+**Next Steps Required:**
+- Investigate Synology NAS NFS cache settings (DSM → Control Panel → File Services → NFS)
+- Consider using bind mounts instead of NFS for middleware rules
+- File issue with Traefik GitHub if this is a known NFS compatibility issue
+
+**Files Modified During Investigation:**
+- `/mnt/docker/traefik3/rules/middlewares.yml` (added customResponseHeaders workaround)
+- `/home/jalance/Projects/docker-services/docker-compose.yml` (temporarily used DEBUG logging, reverted)
 
 ---
 
 ## Current Status
 
-**Next Task:** Task 7 (24-hour checkpoint at 2026-01-25 03:37 UTC) or Task 10 (optional)
+**Next Task:** Task 7 (24-hour checkpoint at 2026-01-25 03:37 UTC)
 
-**Overall Progress:** 7/10 tasks completed + 1 prerequisite (75%) + Task 7 in monitoring phase
+**Overall Progress:** 7/10 tasks completed + 1 prerequisite (75%) + Task 7 in monitoring phase + Task 10 investigated (blocked)
 
 ---
 
@@ -293,6 +332,7 @@ Upgrading Traefik reverse proxy from v2.11 to v3.6 with backward compatibility m
 
 - **PRODUCTION MIGRATION COMPLETE** - Traefik v3.6.7 is now running in production
 - **V3 NATIVE SYNTAX ENABLED** - v2 compatibility mode removed, all rules use v3 syntax
+- **NFS CACHING ISSUE IDENTIFIED** - Synology NFS returning stale data to Traefik file provider
 - Following git workflow: feature branch `traefikv3`
 - Migration plan available at: `/home/jalance/.claude/plans/federated-shimmying-sutherland.md`
 - Docker API compatibility issue resolved by upgrading to Traefik 3.6+

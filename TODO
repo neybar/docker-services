@@ -231,19 +231,31 @@ Please consider migrating all router rules to v3 syntax.
 
 **Issue:** Despite correct configuration in `/mnt/docker/traefik3/rules/middlewares.yml`, the `Permissions-Policy` header is not present in HTTP responses.
 
-**Current Configuration:**
+**Root Cause Identified:** Synology NFS caching issue
+
+**Investigation Findings (2026-01-24):**
+- [x] Verified Docker NFS volume correctly points to `/volume1/docker/traefik3`
+- [x] Confirmed file content inside container is correct via `docker exec traefik cat`
+- [x] Traefik API consistently shows OLD configuration (featurePolicy, sslRedirect: true)
+- [x] Even after volume recreation and container restarts, Traefik reads stale data
+- [x] Added explicit `Permissions-Policy` header in `customResponseHeaders` as workaround
+- [x] Workaround also affected by the same NFS caching issue
+
+**Current Configuration (correct in file, not read by Traefik):**
 ```yaml
 permissionsPolicy: "camera=(), geolocation=(), microphone=(), payment=(), usb=(), vr=()"
+customResponseHeaders:
+  Permissions-Policy: "camera=(), geolocation=(), microphone=(), payment=(), usb=(), vr=()"
 ```
 
-**Steps:**
-- [ ] Verify middleware chain is correctly applied to routers
-- [ ] Check Traefik API for middleware configuration
-- [ ] Review Traefik v3.6 documentation for header middleware changes
-- [ ] Test with explicit header in `customResponseHeaders` as workaround
+**Steps Remaining:**
+- [ ] Investigate Synology NFS server cache settings
+- [ ] Consider bind-mounting local files instead of NFS for middleware rules
+- [ ] File issue with Traefik if NFS caching is a known problem
 - [ ] Update validation script once resolved
 
 **Priority:** Low - Non-blocking security enhancement
+**Status:** BLOCKED by NFS caching issue - requires Synology/NFS investigation
 
 ---
 
