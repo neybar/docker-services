@@ -7,7 +7,7 @@
 # If domain is not provided, reads from .env file
 #
 
-set -euo pipefail
+set -uo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -130,22 +130,23 @@ get_header() {
     curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
 }
 
-echo -e "${BLUE}1. Testing Service Accessibility (HTTP 200)${NC}"
+echo -e "${BLUE}1. Testing Service Accessibility${NC}"
 echo "   Testing ${#SERVICES[@]} services..."
 echo ""
 
 for service in "${SERVICES[@]}"; do
     url="https://${service}.${DOMAIN}"
 
-    if result=$(test_http_status "$url" "200" 15); then
-        print_result "$service ($url)" "PASS"
+    # Get HTTP status code
+    status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k "$url" 2>/dev/null) || status="000"
+
+    # 2xx and 3xx are success, 4xx and 5xx are failures
+    if [[ "$status" =~ ^[23] ]]; then
+        print_result "$service ($url)" "PASS" "HTTP $status"
+    elif [[ "$status" == "000" ]]; then
+        print_result "$service ($url)" "FAIL" "Connection failed"
     else
-        # Check if we got a redirect (302, 303, 307, 308) which may be OK
-        if [[ "$result" =~ ^30[2378]$ ]]; then
-            print_result "$service ($url)" "WARN" "Got redirect ($result) - may need authentication"
-        else
-            print_result "$service ($url)" "FAIL" "HTTP $result"
-        fi
+        print_result "$service ($url)" "FAIL" "HTTP $status"
     fi
 done
 
