@@ -1,4 +1,4 @@
-name: ShellCheck
+name: Lint and Validate
 
 on:
   push:
@@ -23,3 +23,14 @@ jobs:
           # Ignore sample files and directories
           ignore_paths: |
             .git
+
+  docker-compose:
+    name: Docker Compose Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
