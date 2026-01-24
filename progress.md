@@ -33,15 +33,34 @@ Upgrading Traefik reverse proxy from v2.11 to v3.2 with backward compatibility m
 
 **Issues Encountered:** None
 
-**Next Recommended Task:** Task 2 - Update /mnt/docker/traefik3/rules/middlewares.yml for v3 compatibility
+**Next Recommended Task:** Task 3 - Update docker-compose.yml for Traefik v3
+
+---
+
+### Task 2: Update /mnt/docker/traefik3/rules/middlewares.yml for v3 compatibility ✅
+**Completed:** 2026-01-24 03:15 UTC
+
+**Accomplishments:**
+- Updated `featurePolicy` to `permissionsPolicy` (line 38/39) with new v3 syntax
+  - Old: `featurePolicy: "camera 'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr 'none';"`
+  - New: `permissionsPolicy: "camera=(), geolocation=(), microphone=(), payment=(), usb=(), vr=()"`
+- Removed deprecated `sslRedirect: true` from headers middleware (line 30)
+- Updated basic auth realm from "Traefik2 Basic Auth" to "Traefik3 Basic Auth" (line 10)
+
+**Files Modified:**
+- `/mnt/docker/traefik3/rules/middlewares.yml` (NFS mount, not in git repository)
+
+**Issues Encountered:** None
+
+**Next Recommended Task:** Task 3 - Update docker-compose.yml for Traefik v3
 
 ---
 
 ## Current Status
 
-**Next Task:** Task 2 - Update /mnt/docker/traefik3/rules/middlewares.yml for v3 compatibility
+**Next Task:** Task 3 - Update docker-compose.yml for Traefik v3
 
-**Overall Progress:** 1/8 tasks completed (12.5%)
+**Overall Progress:** 2/8 tasks completed (25%)
 
 ---
 

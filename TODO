@@ -23,10 +23,10 @@ tar -czf /tmp/traefik2-backup-$(date +%Y%m%d).tar.gz /mnt/docker/traefik2/
 ---
 
 ### Task 2: Update /mnt/docker/traefik3/rules/middlewares.yml for v3 compatibility
-- [ ] Line 39: Replace `featurePolicy: "camera 'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr 'none';"`
+- [x] Line 39: Replace `featurePolicy: "camera 'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr 'none';"`
       with `permissionsPolicy: "camera=(), geolocation=(), microphone=(), payment=(), usb=(), vr=()"`
-- [ ] Line 30: Remove `sslRedirect: true` (deprecated in v3)
-- [ ] Optional: Line 10: Update realm to "Traefik3 Basic Auth"
+- [x] Line 30: Remove `sslRedirect: true` (deprecated in v3)
+- [x] Optional: Line 10: Update realm to "Traefik3 Basic Auth"
 
 **File location:** `/mnt/docker/traefik3/rules/middlewares.yml`
 
