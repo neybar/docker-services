@@ -81,16 +81,15 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - [ ] Ctrl+C when startup complete
 
 **Step 3: Quick smoke tests (5 min)**
-- [ ] `curl -I https://traefik.$DOMAINNAME`
-- [ ] `curl -I https://authelia.$DOMAINNAME`
-- [ ] `curl -I https://plex.$DOMAINNAME`
-- [ ] `curl -I http://traefik.$DOMAINNAME` (verify HTTP→HTTPS redirect)
+- [ ] Run validation script: `./scripts/validate-traefik.sh`
+- [ ] Verify all services return HTTP 200 (running from trusted network)
+- [ ] Verify HTTP→HTTPS redirect test passes
+- [ ] Verify Permissions-Policy header test passes
 
-**Step 4: Full validation (5 min)**
-- [ ] Access Traefik dashboard: https://traefik.$DOMAINNAME
-- [ ] Verify Authelia authentication flow
-- [ ] Test 2-3 critical services (Plex, Sonarr, etc.)
-- [ ] Check browser dev tools for Permissions-Policy header
+**Step 4: Manual verification (5 min)**
+- [ ] Access Traefik dashboard in browser: https://traefik.$DOMAINNAME
+- [ ] Test 2-3 critical services manually (Plex, Sonarr, etc.)
+- [ ] Confirm certificate is valid in browser
 
 **Step 5: Monitor logs**
 - [ ] `docker compose logs -f traefik | grep -i error`
@@ -109,32 +108,22 @@ docker compose ps
 
 ### Task 6: Test all services after Traefik v3 migration
 
-**Critical tests:**
-- [ ] HTTP → HTTPS redirect works
-- [ ] Authelia 2FA authentication flow
-- [ ] Wildcard certificate loaded (*.thelances.net)
-- [ ] Permissions-Policy header present (browser dev tools)
-- [ ] No errors in Traefik logs
+**Automated validation (run from trusted network):**
+- [ ] Run: `./scripts/validate-traefik.sh`
+- [ ] All 17 services return HTTP 200
+- [ ] HTTP → HTTPS redirect works (308)
+- [ ] Permissions-Policy header present
+- [ ] TLS certificate valid
 
-**Services to test:**
-- [ ] Traefik Dashboard - https://traefik.$DOMAINNAME
-- [ ] Authelia - https://authelia.$DOMAINNAME
-- [ ] Portainer - https://portainer.$DOMAINNAME
-- [ ] Organizr - https://start.$DOMAINNAME
-- [ ] Plex - https://plex.$DOMAINNAME
-- [ ] Sonarr - https://sonarr.$DOMAINNAME
-- [ ] Radarr - https://radarr.$DOMAINNAME
-- [ ] Bazarr - https://bazarr.$DOMAINNAME
-- [ ] SABnzbd - https://sabnzb.$DOMAINNAME
-- [ ] NZBHydra2 - https://hydra.$DOMAINNAME
-- [ ] Calibre-Web - https://books.$DOMAINNAME
-- [ ] LazyLibrarian - https://lazylib.$DOMAINNAME
-- [ ] Home Assistant - https://homeassistant.$DOMAINNAME
-- [ ] Pi-hole - https://pihole.$DOMAINNAME
-- [ ] Smokeping - https://smokeping.$DOMAINNAME
-- [ ] Homebridge - https://homebridge.$DOMAINNAME
-- [ ] DSM (HTTPS) - https://home.$DOMAINNAME:443
-- [ ] DSM (Admin) - https://home.$DOMAINNAME:5001
+**Manual verification:**
+- [ ] No errors in Traefik logs: `docker compose logs -f traefik | grep -i error`
+- [ ] Spot-check 2-3 services in browser (Plex, Sonarr, Organizr)
+
+**Services tested by script:**
+- traefik, authelia, plex, portainer, start (Organizr)
+- sonarr, radarr, bazarr, sabnzb, hydra
+- books (Calibre-Web), lazylib, homeassistant, pihole
+- smokeping, homebridge, home (DSM on port 5001)
 
 ---
 
