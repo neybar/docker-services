@@ -33,7 +33,7 @@ tar -czf /tmp/traefik2-backup-$(date +%Y%m%d).tar.gz /mnt/docker/traefik2/
 ---
 
 ### Task 3: Update docker-compose.yml for Traefik v3
-- [x] Line 147: Update image from `traefik:v2.11` to `traefik:3.2`
+- [x] Line 147: Update image from `traefik:v2.11` to `traefik:3.6` (upgraded from 3.2 due to Docker API compatibility)
 - [x] Line 174: DELETE `--providers.docker.swarmMode=false` (no longer supported)
 - [x] After line 152: ADD `- --core.defaultRuleSyntax=v2` (enable v2 compatibility)
 - [x] Line 68: Update volume path: `device: :/volume1/docker/traefik3`
@@ -72,27 +72,30 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ### Task 5: Execute Traefik v3 migration during maintenance window
 
 **Step 1: Stop current Traefik (2 min)**
-- [ ] `docker compose stop traefik`
-- [ ] `docker compose rm -f traefik`
+- [x] `docker compose stop traefik`
+- [x] `docker compose rm -f traefik`
 
 **Step 2: Start Traefik v3 (2 min)**
-- [ ] `docker compose up -d traefik`
-- [ ] `docker compose logs -f traefik` (watch for "Configuration loaded")
-- [ ] Ctrl+C when startup complete
+- [x] `docker compose up -d traefik`
+- [x] `docker compose logs -f traefik` (watch for "Configuration loaded")
+- [x] Ctrl+C when startup complete
+
+**Note:** Upgraded from traefik:3.2 to traefik:3.6 due to Docker 29.x API compatibility issue.
+Docker 29+ requires minimum API version 1.44, which is only supported in Traefik 3.6+.
 
 **Step 3: Quick smoke tests (5 min)**
-- [ ] Run validation script: `./scripts/validate-traefik.sh`
-- [ ] Verify all services return HTTP 200 (running from trusted network)
-- [ ] Verify HTTP→HTTPS redirect test passes
-- [ ] Verify Permissions-Policy header test passes
+- [x] Run validation script: `./scripts/validate-traefik.sh`
+- [x] Verify all services return HTTP 200 (running from trusted network)
+- [x] Verify HTTP→HTTPS redirect test passes
+- [ ] Verify Permissions-Policy header test passes (KNOWN ISSUE: header not appearing, needs investigation)
 
 **Step 4: Manual verification (5 min)**
-- [ ] Access Traefik dashboard in browser: https://traefik.$DOMAINNAME
-- [ ] Test 2-3 critical services manually (Plex, Sonarr, etc.)
-- [ ] Confirm certificate is valid in browser
+- [x] Access Traefik dashboard in browser: https://traefik.$DOMAINNAME
+- [x] Test 2-3 critical services manually (Plex, Sonarr, etc.)
+- [x] Confirm certificate is valid in browser
 
 **Step 5: Monitor logs**
-- [ ] `docker compose logs -f traefik | grep -i error`
+- [x] `docker compose logs -f traefik | grep -i error`
 
 **ROLLBACK IF NEEDED (5 minutes):**
 ```bash

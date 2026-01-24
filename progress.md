@@ -1,7 +1,7 @@
 # Traefik v2.11 → v3 Migration Progress
 
 ## Project Overview
-Upgrading Traefik reverse proxy from v2.11 to v3.2 with backward compatibility mode to minimize risk.
+Upgrading Traefik reverse proxy from v2.11 to v3.6 with backward compatibility mode to minimize risk.
 
 **Start Date:** 2026-01-24
 **Status:** In Progress
@@ -128,19 +128,54 @@ Upgrading Traefik reverse proxy from v2.11 to v3.2 with backward compatibility m
 
 ---
 
+### Task 5: Execute Traefik v3 migration during maintenance window ✅
+**Completed:** 2026-01-24 03:37 UTC
+
+**Accomplishments:**
+- Stopped Traefik v2.11 container
+- Started Traefik v3 container (upgraded to v3.6.7)
+- Ran validation script with 25/26 tests passing
+- Verified all 17 services accessible via HTTPS
+- Confirmed HTTP→HTTPS redirect working
+- Verified TLS certificate valid (56 days remaining)
+- Traefik dashboard accessible at https://traefik.thelances.net
+
+**Critical Issue Encountered and Resolved:**
+- **Problem:** Docker 29.1.5 requires minimum API version 1.44, but Traefik 3.2 uses API version 1.24
+- **Error:** "client version 1.24 is too old. Minimum supported API version is 1.44"
+- **Solution:** Upgraded from traefik:3.2 to traefik:3.6 which includes "Auto-negotiate Docker API Version" fix
+- **Reference:** https://github.com/traefik/traefik/issues/12253
+
+**Known Issue (Non-blocking):**
+- Permissions-Policy header not appearing in responses despite correct middleware configuration
+- This needs investigation but does not affect core functionality
+
+**Validation Results:**
+- Passed: 25 tests
+- Failed: 1 test (Permissions-Policy header)
+- All services accessible: traefik, authelia, plex, portainer, start, sonarr, radarr, bazarr, sabnzb, hydra, books, lazylib, homeassistant, pihole, smokeping, homebridge, home
+
+**Files Modified:**
+- `/home/jalance/Projects/docker-services/docker-compose.yml` (image: traefik:3.6)
+
+**Next Recommended Task:** Task 6 - Test all services after Traefik v3 migration
+
+---
+
 ## Current Status
 
-**Next Task:** Task 5 - Execute Traefik v3 migration during maintenance window
+**Next Task:** Task 6 - Test all services after Traefik v3 migration
 
-**Overall Progress:** 4/8 tasks completed + 1 prerequisite (56%)
+**Overall Progress:** 5/8 tasks completed + 1 prerequisite (68%)
 
 ---
 
 ## Notes
 
-- All tasks are in preparation phase
-- Following git workflow: feature branch `upgrade-traefik-v3`
+- **PRODUCTION MIGRATION COMPLETE** - Traefik v3.6.7 is now running in production
+- Following git workflow: feature branch `traefikv3`
 - Migration plan available at: `/home/jalance/.claude/plans/federated-shimmying-sutherland.md`
+- Docker API compatibility issue resolved by upgrading to Traefik 3.6+
 
 ---
 

@@ -144,7 +144,7 @@ services:
   # Traefik 2 - Reverse Proxy
   traefik:
     container_name: traefik
-    image: traefik:3.2
+    image: traefik:3.6
     restart: unless-stopped
     depends_on:
       - socket-proxy
