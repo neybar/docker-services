@@ -55,7 +55,7 @@ if [ "$ARG" = "interactive" ]; then
     # Interactive mode - single run without acceptEdits
     info "Running in interactive mode..."
     echo ""
-    claude --prompt-file "$PROMPT_FILE"
+    claude < "$PROMPT_FILE"
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -eq 0 ]; then
@@ -74,7 +74,7 @@ else
     ITERATIONS=$ARG
 
     # Sanity check on iterations
-    if [ $ITERATIONS -lt 1 ] || [ $ITERATIONS -gt 100 ]; then
+    if [ "$ITERATIONS" -lt 1 ] || [ "$ITERATIONS" -gt 100 ]; then
         error "Iterations must be between 1 and 100"
         exit 1
     fi
@@ -83,14 +83,14 @@ else
     info "Exit conditions: iteration limit, <promise>COMPLETE</promise>, or error"
     echo ""
 
-    for i in $(seq 1 $ITERATIONS); do
+    for i in $(seq 1 "$ITERATIONS"); do
         warn "╔════════════════════════════════════════════════════════════╗"
         warn "║  Iteration $i of $ITERATIONS"
         warn "╚════════════════════════════════════════════════════════════╝"
         echo ""
 
         # Run claude and capture output
-        OUTPUT=$(claude --permission-mode acceptEdits --prompt-file "$PROMPT_FILE" 2>&1)
+        OUTPUT=$(claude --permission-mode acceptEdits < "$PROMPT_FILE" 2>&1)
         EXIT_CODE=$?
 
         # Display output
@@ -114,7 +114,7 @@ else
         fi
 
         # Brief pause between iterations for readability
-        if [ $i -lt $ITERATIONS ]; then
+        if [ "$i" -lt "$ITERATIONS" ]; then
             sleep 1
         fi
     done
