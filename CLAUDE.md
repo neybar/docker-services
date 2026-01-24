@@ -75,6 +75,46 @@ Critical variables in `.env`:
 5. Create NFS volume in volumes section if config persistence needed
 6. Reference existing services (e.g., sonarr, radarr) as templates
 
+## Log Management
+
+### Docker Container Logs (stdout/stderr)
+
+All containers use standardized Docker logging with automatic rotation:
+- **Driver**: json-file
+- **Max size**: 10MB per log file
+- **Max files**: 3 files retained
+- **Total capacity**: ~30MB per container
+
+Configuration is defined via YAML anchor in `docker-compose.yml`:
+```yaml
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+```
+
+View container logs: `docker compose logs -f <service-name>`
+
+### Application Logs (on NFS mount)
+
+Many applications maintain their own logs on the NFS mount at `/mnt/docker/<service>/logs/`. These have **built-in rotation**:
+
+| Application | Location | Rotation Method | Max Size |
+|-------------|----------|-----------------|----------|
+| **Radarr** | `/mnt/docker/radarr/logs/` | Built-in (1MB/file, ~25 files) | ~25-30MB |
+| **Sonarr** | `/mnt/docker/sonarr/logs/` | Built-in (1MB/file, ~25 files) | ~25-30MB |
+| **SABnzbd** | `/mnt/docker/sabnzb/logs/` | Configured (5MB max, 5 backups) | ~30MB |
+| **NZBHydra2** | `/mnt/docker/hydra/logs/` | Date-based rotation | ~1MB |
+| **Home Assistant** | `/mnt/docker/homeassistant/` | Python logging rotation | ~10MB |
+
+**Log levels** are configured per application:
+- Radarr/Sonarr: Set to `info` level in `/mnt/docker/<service>/config.xml`
+- SABnzbd: Configured via Web UI (Settings → Logging)
+- NZBHydra2: Configured via Web UI (Settings → Logging)
+
+**Do not** add external logrotate configuration - applications manage their own logs and Docker handles container logs.
+
 ## Git Workflow
 
 **IMPORTANT: Never commit directly to master.**
