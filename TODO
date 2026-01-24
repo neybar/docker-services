@@ -132,7 +132,16 @@ docker compose ps
 
 ### Task 7: Monitor Traefik v3 for 24-48 hours post-migration
 
-**Monitor:**
+**Monitoring Period:** 2026-01-24 03:37 UTC → 2026-01-25 03:37 UTC (24h) / 2026-01-26 03:37 UTC (48h)
+
+**Initial Checkpoint (10 min post-migration):**
+- [x] Traefik v3.6.7 running and healthy
+- [x] All core services responding (traefik, authelia, plex, sonarr, radarr, homeassistant)
+- [x] No runtime errors in logs (only expected deprecation warnings)
+- [x] No 5xx errors in access logs
+- [x] Security headers present (HSTS, X-Content-Type-Options, etc.)
+
+**24-Hour Checkpoint (2026-01-25 ~03:37 UTC):**
 - [ ] Access logs for 4xx/5xx error rate changes
 - [ ] Certificate renewal (if occurs during monitoring period)
 - [ ] CPU/memory usage vs v2.11 baseline
