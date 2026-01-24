@@ -191,6 +191,7 @@ docker compose logs traefik | grep " 5"
 - Main config: `/home/jalance/Projects/docker-services/docker-compose.yml`
 - Middleware rules: `/mnt/docker/traefik3/rules/middlewares.yml`
 - Certificates: `/mnt/docker/traefik3/acme/acme.json`
+- Validation script: `/home/jalance/Projects/docker-services/scripts/validate-traefik.sh` ✅ (created 2026-01-24)
 - Migration plan: `/home/jalance/.claude/plans/federated-shimmying-sutherland.md`
 
 ### Breaking Changes Summary
