@@ -210,14 +210,14 @@ Please consider migrating all router rules to v3 syntax.
 **Migration Guide:** https://doc.traefik.io/traefik/v3.6/migration/v3/#rule-syntax
 
 **Steps:**
-- [ ] Review migration guide for v2 → v3 rule syntax changes
-- [ ] Audit all router rules in docker-compose.yml labels
-- [ ] Audit all router rules in `/mnt/docker/traefik3/rules/*.yml`
-- [ ] Update `HostRegexp` rules to new syntax (backticks → template syntax)
-- [ ] Update any `Host` rules if needed
-- [ ] Remove `--core.defaultRuleSyntax=v2` flag from docker-compose.yml
-- [ ] Test all services after migration
-- [ ] Run validation script to confirm no regressions
+- [x] Review migration guide for v2 → v3 rule syntax changes
+- [x] Audit all router rules in docker-compose.yml labels
+- [x] Audit all router rules in `/mnt/docker/traefik3/rules/*.yml`
+- [x] Update `HostRegexp` rules to new syntax (backticks → template syntax)
+- [x] Update any `Host` rules if needed (none needed - all Host rules are v3 compatible)
+- [x] Remove `--core.defaultRuleSyntax=v2` flag from docker-compose.yml
+- [x] Test all services after migration
+- [x] Run validation script to confirm no regressions
 
 **Known v2 → v3 Syntax Changes:**
 - `HostRegexp(\`{host:.+}\`)` → `HostRegexp(\`.+\`)`

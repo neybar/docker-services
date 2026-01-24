@@ -151,7 +151,6 @@ services:
     command: # CLI arguments
       - --global.checkNewVersion=true
       - --global.sendAnonymousUsage=true
-      - --core.defaultRuleSyntax=v2
       - --entryPoints.http.address=:80
       - --entryPoints.https.address=:443
       - --entryPoints.dsm-admin.address=:5001
@@ -217,7 +216,7 @@ services:
       - "traefik.enable=true"
       # HTTP-to-HTTPS Redirect
       - "traefik.http.routers.http-catchall.entrypoints=http"
-      - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`.+`)"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       # HTTP Routers

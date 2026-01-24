@@ -247,17 +247,52 @@ Upgrading Traefik reverse proxy from v2.11 to v3.6 with backward compatibility m
 
 ---
 
+### Task 9: Migrate router rules from v2 to v3 syntax ✅
+**Completed:** 2026-01-24 04:05 UTC
+
+**Accomplishments:**
+- Reviewed Traefik v3 migration documentation for rule syntax changes
+- Audited all router rules in docker-compose.yml (17 services)
+- Audited all router rules in `/mnt/docker/traefik3/rules/*.yml` (4 files)
+- Updated HTTP-to-HTTPS catchall router from v2 to v3 syntax:
+  - Before: `HostRegexp(\`{host:.+}\`)`
+  - After: `HostRegexp(\`.+\`)`
+- Verified all Host() rules are already v3 compatible (no changes needed)
+- Removed `--core.defaultRuleSyntax=v2` flag from docker-compose.yml
+- Restarted Traefik to apply changes
+- Verified deprecation warning is no longer present in logs
+- Ran validation script: 25/26 tests passed (Permissions-Policy still tracked in Task 10)
+
+**Rule Audit Results:**
+| Location | Rules Found | V3 Compatible |
+|----------|-------------|---------------|
+| docker-compose.yml | 18 routers | ✅ (1 updated) |
+| synology.yml | 3 routers | ✅ (no changes) |
+| homebridge.yml | 1 router | ✅ (no changes) |
+| middlewares.yml | 0 routers | N/A |
+| middleware-chains.yml | 0 routers | N/A |
+
+**Files Modified:**
+- `/home/jalance/Projects/docker-services/docker-compose.yml` (line 219, line 154 removed)
+
+**Issues Encountered:** None
+
+**Next Recommended Task:** Task 10 - Investigate Permissions-Policy header, or wait for Task 7 24-hour checkpoint
+
+---
+
 ## Current Status
 
-**Next Task:** Task 7 - Monitor Traefik v3 for 24-48 hours (awaiting monitoring period completion)
+**Next Task:** Task 7 (24-hour checkpoint at 2026-01-25 03:37 UTC) or Task 10 (optional)
 
-**Overall Progress:** 6/10 tasks completed + 1 prerequisite (65%) + Task 7 in monitoring phase
+**Overall Progress:** 7/10 tasks completed + 1 prerequisite (75%) + Task 7 in monitoring phase
 
 ---
 
 ## Notes
 
 - **PRODUCTION MIGRATION COMPLETE** - Traefik v3.6.7 is now running in production
+- **V3 NATIVE SYNTAX ENABLED** - v2 compatibility mode removed, all rules use v3 syntax
 - Following git workflow: feature branch `traefikv3`
 - Migration plan available at: `/home/jalance/.claude/plans/federated-shimmying-sutherland.md`
 - Docker API compatibility issue resolved by upgrading to Traefik 3.6+
