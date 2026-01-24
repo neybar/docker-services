@@ -3,12 +3,12 @@
 ## Phase 1: Preparation (Before Maintenance Window)
 
 ### Task 1: Create /mnt/docker/traefik3 directory structure and copy configuration
-- [ ] Create `/mnt/docker/traefik3/rules/` directory
-- [ ] Create `/mnt/docker/traefik3/acme/` directory
-- [ ] Copy all files from `/mnt/docker/traefik2/rules/` to `/mnt/docker/traefik3/rules/`
-- [ ] Copy `acme.json` from traefik2/acme to traefik3/acme
-- [ ] Set permissions: `chmod 600 /mnt/docker/traefik3/acme/acme.json`
-- [ ] Create backup: `tar -czf /tmp/traefik2-backup-$(date +%Y%m%d).tar.gz /mnt/docker/traefik2/`
+- [x] Create `/mnt/docker/traefik3/rules/` directory
+- [x] Create `/mnt/docker/traefik3/acme/` directory
+- [x] Copy all files from `/mnt/docker/traefik2/rules/` to `/mnt/docker/traefik3/rules/`
+- [x] Copy `acme.json` from traefik2/acme to traefik3/acme
+- [x] Set permissions: `chmod 600 /mnt/docker/traefik3/acme/acme.json`
+- [x] Create backup: `tar -czf /tmp/traefik2-backup-$(date +%Y%m%d).tar.gz /mnt/docker/traefik2/`
 
 **Commands:**
 ```bash
