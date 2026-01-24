@@ -5,7 +5,7 @@ Upgrading Traefik reverse proxy from v2.11 to v3.6 with backward compatibility m
 
 **Start Date:** 2026-01-24
 **Status:** In Progress
-**Total Tasks:** 8
+**Total Tasks:** 10
 
 ---
 
@@ -158,15 +158,62 @@ Upgrading Traefik reverse proxy from v2.11 to v3.6 with backward compatibility m
 **Files Modified:**
 - `/home/jalance/Projects/docker-services/docker-compose.yml` (image: traefik:3.6)
 
-**Next Recommended Task:** Task 6 - Test all services after Traefik v3 migration
+**Next Recommended Task:** Task 7 - Monitor Traefik v3 for 24-48 hours post-migration
+
+---
+
+### Task 6: Test all services after Traefik v3 migration ✅
+**Completed:** 2026-01-24 03:43 UTC
+
+**Accomplishments:**
+- Verified all 17 services are accessible via HTTPS with acceptable response codes
+- Tested HTTP→HTTPS redirect functionality (302 redirect working)
+- Confirmed TLS certificate is valid
+- Verified Traefik v3.6.7 is running and responding correctly
+- Checked Traefik logs - only deprecation warnings (expected for v2 compatibility mode)
+
+**Service Test Results:**
+| Service | HTTP Code | Status |
+|---------|-----------|--------|
+| traefik | 200 | ✅ |
+| authelia | 200 | ✅ |
+| plex | 401 | ✅ (own auth) |
+| portainer | 200 | ✅ |
+| start (Organizr) | 200 | ✅ |
+| sonarr | 200 | ✅ |
+| radarr | 200 | ✅ |
+| bazarr | 200 | ✅ |
+| sabnzb | 303 | ✅ (redirect) |
+| hydra | 200 | ✅ |
+| books | 302 | ✅ (redirect) |
+| lazylib | 303 | ✅ (redirect) |
+| homeassistant | 200 | ✅ |
+| pihole | 302 | ✅ (redirect) |
+| smokeping | 302 | ✅ (redirect) |
+| homebridge | 200 | ✅ |
+| home (DSM) | 200 | ✅ |
+
+**Security Headers Verified:**
+- Strict-Transport-Security: ✅ Present
+- X-Content-Type-Options: ✅ Present
+- X-Frame-Options: ✅ Present
+- X-XSS-Protection: ✅ Present
+- Referrer-Policy: ✅ Present
+- Permissions-Policy: ❌ Missing (Known issue - Task 10)
+
+**Known Issues:**
+- Permissions-Policy header not appearing despite correct middleware configuration
+- This is a non-blocking issue tracked in Task 10
+
+**Next Recommended Task:** Task 7 - Monitor Traefik v3 for 24-48 hours post-migration
 
 ---
 
 ## Current Status
 
-**Next Task:** Task 6 - Test all services after Traefik v3 migration
+**Next Task:** Task 7 - Monitor Traefik v3 for 24-48 hours post-migration
 
-**Overall Progress:** 5/8 tasks completed + 1 prerequisite (68%)
+**Overall Progress:** 6/10 tasks completed + 1 prerequisite (65%)
 
 ---
 
