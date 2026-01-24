@@ -65,12 +65,12 @@ volumes:
     driver_opts:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
-      device: :/volume1/docker/traefik2
+      device: :/volume1/docker/traefik3
   traefik_acme_config:
     driver_opts:
       type: nfs
       o: addr=192.168.0.6,ro,nfsvers=4.1,async
-      device: :/volume1/docker/traefik2/acme
+      device: :/volume1/docker/traefik3/acme
   portainer_config:
     driver_opts:
       type: nfs
@@ -144,13 +144,14 @@ services:
   # Traefik 2 - Reverse Proxy
   traefik:
     container_name: traefik
-    image: traefik:v2.11
+    image: traefik:3.2
     restart: unless-stopped
     depends_on:
       - socket-proxy
     command: # CLI arguments
       - --global.checkNewVersion=true
       - --global.sendAnonymousUsage=true
+      - --core.defaultRuleSyntax=v2
       - --entryPoints.http.address=:80
       - --entryPoints.https.address=:443
       - --entryPoints.dsm-admin.address=:5001
@@ -171,7 +172,6 @@ services:
       - --providers.docker.defaultrule=Host(`{{ index .Labels "com.docker.compose.service" }}.$DOMAINNAME`)
       - --providers.docker.exposedByDefault=false
       - --providers.docker.network=t2_proxy
-      - --providers.docker.swarmMode=false
       - --providers.file.directory=/config/rules # Load dynamic configuration from YAML files in a directory
       - --providers.file.watch=true # Only works on top level files in the rules folder
       # - --certificatesResolvers.dns-cloudflare.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory # LetsEncrypt Staging Server - uncomment when testing

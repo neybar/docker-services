@@ -33,11 +33,11 @@ tar -czf /tmp/traefik2-backup-$(date +%Y%m%d).tar.gz /mnt/docker/traefik2/
 ---
 
 ### Task 3: Update docker-compose.yml for Traefik v3
-- [ ] Line 147: Update image from `traefik:v2.11` to `traefik:3.2`
-- [ ] Line 174: DELETE `--providers.docker.swarmMode=false` (no longer supported)
-- [ ] After line 152: ADD `- --core.defaultRuleSyntax=v2` (enable v2 compatibility)
-- [ ] Line 68: Update volume path: `device: :/volume1/docker/traefik3`
-- [ ] Line 73: Update volume path: `device: :/volume1/docker/traefik3/acme`
+- [x] Line 147: Update image from `traefik:v2.11` to `traefik:3.2`
+- [x] Line 174: DELETE `--providers.docker.swarmMode=false` (no longer supported)
+- [x] After line 152: ADD `- --core.defaultRuleSyntax=v2` (enable v2 compatibility)
+- [x] Line 68: Update volume path: `device: :/volume1/docker/traefik3`
+- [x] Line 73: Update volume path: `device: :/volume1/docker/traefik3/acme`
 
 **Note:** HTTP-to-HTTPS catchall rule (line 220) can stay as-is with v2 compatibility mode
 
