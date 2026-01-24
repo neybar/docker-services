@@ -6,6 +6,12 @@
 # docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_proxy
 # Subnet range 192.168.0.0/16 covers 192.168.0.0 to 192.168.255.255
 
+######### YAML EXTENSIONS (for reusable configuration blocks)
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 ######### NETWORKS
 networks:
@@ -206,11 +212,7 @@ services:
     environment:
       - CF_API_EMAIL=$CLOUDFLARE_EMAIL
       - CF_API_KEY=$CLOUDFLARE_API_KEY
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       # HTTP-to-HTTPS Redirect
@@ -258,6 +260,7 @@ services:
       - SERVICES=1
       - TASKS=1
       - SYSTEM=1 # Required for docker system df
+    logging: *default-logging
 
   # Authelia (Lite) - Self-Hosted Single Sign-On and Two-Factor Authentication
   authelia:
@@ -284,6 +287,7 @@ services:
     #   - authelia_storage_mysql_password
     #   - authelia_notifier_smtp_password
     #   - authelia_duo_api_secret_key
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -315,6 +319,7 @@ services:
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -340,6 +345,7 @@ services:
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375
+    logging: *default-logging
 
   # Organizr - Unified Frontend
   organizr:
@@ -359,6 +365,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -386,6 +393,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
 
   # Plex - Media Server
   plex:
@@ -423,6 +431,7 @@ services:
       - 32412:32412/udp
       - 32413:32413/udp
       - 32414:32414/udp
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -451,6 +460,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -479,6 +489,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -507,6 +518,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -536,6 +548,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -564,6 +577,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -590,6 +604,7 @@ services:
       - PGID=$PGID
       - TZ=$TZ
       - DOCKER_MODS=linuxserver/calibre-web:calibre
+    logging: *default-logging
     volumes:
       - calibre-web_config:/config
       - ebooks:/books
@@ -619,6 +634,7 @@ services:
       - PGID=$PGID
       - TZ=$TZ
       - DOCKER_MODS=linuxserver/calibre-web:calibre|linuxserver/mods:lazylibrarian-ffmpeg #optional
+    logging: *default-logging
     volumes:
       - lazylibrarian_config:/config
       - downloads:/downloads
@@ -647,6 +663,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     volumes:
       - homeassistant_config:/config
       - /etc/localtime:/etc/localtime:ro
@@ -673,6 +690,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     volumes:
       - $LOCALDOCKERDIR/slideshow_updater/generate_slideshow.yml:/usr/src/pi_slide_show/generate_slideshow.yml
       - photo:/mnt/photo
@@ -710,6 +728,7 @@ services:
       CONDITIONAL_FORWARDING_IP: 192.168.0.1
       CONDITIONAL_FORWARDING_DOMAIN: home.$DOMAINNAME
       CONDITIONAL_FORWARDING_REVERSE: 0.168.192.in-addr.arpa
+    logging: *default-logging
     volumes:
       - $LOCALDOCKERDIR/pihole/pihole:/etc/pihole
       - $LOCALDOCKERDIR/pihole/dnsmasq.d:/etc/dnsmasq.d
@@ -742,6 +761,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
+    logging: *default-logging
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
