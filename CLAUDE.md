@@ -41,8 +41,8 @@ docker compose down
 - **Local NVME** (/usr/local/plex, /tmp/plex_transcode): High-performance storage for Plex transcoding
 
 ### Service Categories
-- **Infrastructure**: Traefik, Docker Socket Proxy, Authelia, Portainer, Docker-GC
-- **Media**: Plex (GPU-enabled), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2
+- **Infrastructure**: Traefik, Docker Socket Proxy, Authelia, Portainer, Task Scheduler
+- **Media**: Plex (LinuxServer.io, GPU-enabled), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2
 - **Books**: Calibre-Web, Lazy Librarian
 - **DNS/Ad-blocking**: Pi-hole (port 53)
 - **Home Automation**: Home Assistant (privileged, host network)
@@ -54,7 +54,7 @@ docker compose down
 - `env.example` - Required environment variables template (copy to `.env`)
 - `acme/acme.json` - Let's Encrypt certificates (Traefik managed)
 - `pihole/` - Pi-hole DNS configuration
-- `docker-gc/` - Garbage collection exclusion rules
+- `task-scheduler/` - Scheduled maintenance tasks (Docker cleanup, Plex restart)
 
 ## Environment Variables
 
@@ -162,6 +162,9 @@ git push -u origin feature-branch-name
 ## Notes
 
 - Pi-hole runs on host port 53 - may conflict with systemd-resolved
-- Plex uses `/dev/dri` for GPU transcoding
+- Plex uses LinuxServer.io image (`lscr.io/linuxserver/plex`) with `/dev/dri` for GPU transcoding
+- Plex uses `VERSION=public` for auto-updates on container restart
 - Home Assistant runs privileged with host network for device access
-- Docker-GC runs daily at midnight with 7-day grace period
+- Task Scheduler runs scheduled maintenance:
+  - Daily at midnight: Docker cleanup (prune images/containers/volumes older than 7 days)
+  - Sunday at 3 AM: Plex restart (picks up VERSION=public updates)

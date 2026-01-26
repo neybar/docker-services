@@ -342,11 +342,12 @@ services:
       - "traefik.http.routers.portainer-rtr.service=portainer-svc"
       - "traefik.http.services.portainer-svc.loadbalancer.server.port=9000"
 
-  # Docker-GC - Automatic Docker Garbage Collection
-  # Runs daily at midnight, removes images/containers/volumes older than 7 days
-  dockergc:
-    build: $LOCALDOCKERDIR/docker-gc
-    container_name: dockergc
+  # Task Scheduler - Scheduled maintenance tasks
+  # - Daily at midnight: Docker cleanup (prune images/containers/volumes older than 7 days)
+  # - Sunday at 3 AM: Plex restart (picks up VERSION=public updates)
+  task-scheduler:
+    build: $LOCALDOCKERDIR/task-scheduler
+    container_name: task-scheduler
     restart: unless-stopped
     networks:
       - socket_proxy
@@ -408,17 +409,15 @@ services:
   # Plex - Media Server
   plex:
     container_name: plex
-    # image: mauimauer/plex # This was an attempt to get HW transcoding working with Ryzen
-    # image: lscr.io/linuxserver/plex:latest
-    image: plexinc/pms-docker:plexpass
+    image: lscr.io/linuxserver/plex:latest
     restart: unless-stopped
     networks:
       - t2_proxy
-    # security_opt:
-    #   - no-new-privileges:true
+    security_opt:
+      - no-new-privileges:true
     volumes:
-      - /usr/local/plex:/config # moving to NVME to see if I can get it to go faster
-      - /tmp/plex_transcode:/transcode # moving transcoder to NVME also, need to monitor for size and then move to ram disk
+      - /usr/local/plex:/config # NVME for performance
+      - /tmp/plex_transcode:/transcode # NVME for transcode performance
       - video:/video
       - audiobooks:/audiobooks
       - music:/music
@@ -427,20 +426,18 @@ services:
       - PGID=$PGID
       - TZ=$TZ
       - VERSION=public
-      - PLEX_CLAIM=claim-pKLhV-iyXUFtWX-3Vw3Y
     devices:
       - /dev/dri:/dev/dri
     ports:
-      - 32469:32469
-      - 32400:32400
-      - 32401:32401
-      - 3005:3005
-      - 8324:8324
-      # - 1900:1900/udp # This is the SSDP / DNLA port.  Currently conflicts with HomeAssistant.  If they are moved to different VM's then I can re-enable this
-      - 32410:32410/udp
-      - 32412:32412/udp
-      - 32413:32413/udp
-      - 32414:32414/udp
+      - 32400:32400 # Main Plex port (required)
+      - 3005:3005 # Plex Companion
+      - 8324:8324 # Roku/Plex Companion
+      # - 1900:1900/udp # SSDP/DLNA - conflicts with HomeAssistant
+      - 32410:32410/udp # GDM network discovery
+      - 32412:32412/udp # GDM network discovery
+      - 32413:32413/udp # GDM network discovery
+      - 32414:32414/udp # GDM network discovery
+      - 32469:32469 # DLNA server
     logging: *default-logging
     labels:
       - "traefik.enable=true"
