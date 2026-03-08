@@ -619,7 +619,7 @@ services:
     logging: *default-logging
     volumes:
       - calibre_config:/config
-      - ebooks:/books
+      - ebooks:/config/Calibre Library
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
