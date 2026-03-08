@@ -86,11 +86,6 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/calibre-web
-  calibre_config:
-    driver_opts:
-      type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
-      device: :/volume1/docker/calibre
   lazylibrarian_config:
     driver_opts:
       type: nfs
@@ -603,36 +598,6 @@ services:
       - "traefik.http.routers.hydra-rtr.service=hydra-svc"
       - "traefik.http.services.hydra-svc.loadbalancer.server.port=5076"
 
-  # Calibre - full desktop interface to book library
-  calibre:
-    image: lscr.io/linuxserver/calibre:latest
-    container_name: calibre
-    restart: unless-stopped
-    networks:
-      - t2_proxy
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      - PUID=$PUID
-      - PGID=$PGID
-      - TZ=$TZ
-    logging: *default-logging
-    volumes:
-      - calibre_config:/config
-      - ebooks:/config/Calibre Library
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.calibre-rtr.entrypoints=https"
-      - "traefik.http.routers.calibre-rtr.rule=Host(`calibre.$DOMAINNAME`)"
-      - "traefik.http.routers.calibre-rtr.tls=true"
-      ## Middlewares
-      - "traefik.http.middlewares.local-ipwhitelist.ipwhitelist.sourcerange=127.0.0.1/32, 192.168.0.0/16, 172.16.0.0/12, 10.0.0.0/8"
-      - "traefik.http.routers.calibre-rtr.middlewares=local-ipwhitelist"
-      ## HTTP Services
-      - "traefik.http.routers.calibre-rtr.service=calibre-svc"
-      - "traefik.http.services.calibre-svc.loadbalancer.server.port=8080"
-
   # Calibre Web - interface to book library
   calibre-web:
     image: lscr.io/linuxserver/calibre-web
@@ -676,7 +641,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
-      - DOCKER_MODS=linuxserver/calibre-web:calibre|linuxserver/mods:lazylibrarian-ffmpeg #optional
+      - DOCKER_MODS=linuxserver/mods:universal-calibre|linuxserver/mods:lazylibrarian-ffmpeg #optional
     logging: *default-logging
     volumes:
       - lazylibrarian_config:/config

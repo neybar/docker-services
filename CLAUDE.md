@@ -43,7 +43,7 @@ docker compose down
 ### Service Categories
 - **Infrastructure**: Traefik, Docker Socket Proxy, Authelia, Portainer, Task Scheduler
 - **Media**: Plex (LinuxServer.io, GPU-enabled), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2
-- **Books**: Calibre (Full Desktop), Calibre-Web (Frontend), Lazy Librarian
+- **Books**: Calibre-Web (Frontend), Lazy Librarian (Manager)
 - **DNS/Ad-blocking**: Pi-hole (port 53)
 - **Home Automation**: Home Assistant (privileged, host network)
 - **Dashboard**: Organizr
@@ -129,7 +129,6 @@ Many applications maintain their own logs on the NFS mount at `/mnt/docker/<serv
 | **Sonarr** | `/mnt/docker/sonarr/logs/` | Built-in (1MB/file, ~25 files) | ~25-30MB |
 | **SABnzbd** | `/mnt/docker/sabnzb/logs/` | Configured (5MB max, 5 backups) | ~30MB |
 | **NZBHydra2** | `/mnt/docker/hydra/logs/` | Date-based rotation | ~1MB |
-| **Calibre** | `/mnt/docker/calibre/logs/` | Built-in | ~10MB |
 | **Home Assistant** | `/mnt/docker/homeassistant/` | Python logging rotation | ~10MB |
 
 **Log levels** are configured per application:

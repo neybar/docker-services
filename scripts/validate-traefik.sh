@@ -71,7 +71,6 @@ SERVICES=(
     "sabnzb"
     "hydra"
     "books"              # Calibre-Web
-    "calibre"            # Calibre (Local only)
     "lazylib"
     "homeassistant"
     "pihole:/admin/"     # Pi-hole blocks root, test admin path
