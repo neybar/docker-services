@@ -43,7 +43,7 @@ docker compose down
 ### Service Categories
 - **Infrastructure**: Traefik, Docker Socket Proxy, Authelia, Portainer, Task Scheduler
 - **Media**: Plex (LinuxServer.io, GPU-enabled), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2
-- **Books**: Calibre-Web, Lazy Librarian
+- **Books**: Calibre-Web (Frontend), Lazy Librarian (Manager)
 - **DNS/Ad-blocking**: Pi-hole (port 53)
 - **Home Automation**: Home Assistant (privileged, host network)
 - **Dashboard**: Organizr

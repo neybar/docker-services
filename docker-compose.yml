@@ -551,6 +551,7 @@ services:
       - sabnzb_config:/config
       - downloads:/downloads
       - video:/video
+      - audiobooks:/audiobooks
     environment:
       - PUID=$PUID
       - PGID=$PGID
@@ -640,12 +641,13 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
-      - DOCKER_MODS=linuxserver/calibre-web:calibre|linuxserver/mods:lazylibrarian-ffmpeg #optional
+      - DOCKER_MODS=linuxserver/mods:universal-calibre|linuxserver/mods:lazylibrarian-ffmpeg #optional
     logging: *default-logging
     volumes:
       - lazylibrarian_config:/config
       - downloads:/downloads
       - ebooks:/books
+      - audiobooks:/audiobooks
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
