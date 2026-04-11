@@ -1,2 +1,8 @@
 .env
 unused
+
+# Local service config directories (not tracked)
+acme/
+pihole/
+plex/
+slideshow_updater/
