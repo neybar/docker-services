@@ -49,7 +49,7 @@
 7. **Create Git Commit**
    - Stage relevant changes
    - Create a descriptive commit message following the project's conventions
-   - Include `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
+   - Include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
    - **Do NOT push** unless explicitly instructed
 
 8. **Stop Processing**
@@ -85,7 +85,7 @@ When selecting the most important task, consider:
 - Change 2
 - Change 3
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
 ## Important Notes
