@@ -6,6 +6,11 @@ plex:
   url: http://plex:32400
   token: <<env(PLEX_TOKEN)>>
 
+tmdb:
+  apikey: <<env(TMDB_API_READ_ACCESS_TOKEN)>>
+  language: en
+  region: US
+
 libraries:
   Movies:
     collection_files:
