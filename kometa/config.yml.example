@@ -4,10 +4,10 @@
 
 plex:
   url: http://plex:32400
-  token: <<env(PLEX_TOKEN)>>
+  token: env  # reads from KOMETA_PLEX_TOKEN env var (set in docker-compose)
 
 tmdb:
-  apikey: <<env(TMDB_API_READ_ACCESS_TOKEN)>>
+  apikey: YOUR_TMDB_READ_ACCESS_TOKEN_HERE  # paste token directly; this file is not tracked in git
   language: en
   region: US
 
