@@ -833,7 +833,7 @@ services:
       - PUID=$PUID
       - PGID=$PGID
       - TZ=$TZ
-      - KOMETA_TIMES=05:00
+      - KOMETA_TIMES=01:00
       - PLEX_TOKEN=$PLEX_TOKEN
       - TMDB_API_READ_ACCESS_TOKEN=$TMDB_API_READ_ACCESS_TOKEN
     logging: *default-logging
