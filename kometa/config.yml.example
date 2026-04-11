@@ -4,7 +4,7 @@
 
 plex:
   url: http://plex:32400
-  token: YOUR_PLEX_TOKEN_HERE
+  token: <<env(PLEX_TOKEN)>>
 
 libraries:
   Movies:
