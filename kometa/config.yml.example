@@ -1,0 +1,36 @@
+## Kometa Configuration
+## Copy to /mnt/docker/kometa/config.yml and fill in your Plex token.
+## Retrieve token: Plex Web → Account → Account Settings → Plex Web Preferences → X-Plex-Token
+
+plex:
+  url: http://plex:32400
+  token: <<env(PLEX_TOKEN)>>
+
+tmdb:
+  apikey: <<env(TMDB_API_READ_ACCESS_TOKEN)>>
+  language: en
+  region: US
+
+libraries:
+  Movies:
+    collection_files:
+      - default: basic           # Popular, Trending, etc.
+      - default: imdb            # IMDb Top 250, Most Popular, etc.
+      - default: tmdb            # TMDb Popular, Top Rated
+      - default: franchise       # Movie franchises (James Bond, MCU, etc.)
+      - default: universe        # Cinematic universes (Marvel, DC, etc.)
+      - default: decade          # 1980s, 1990s, 2000s, etc.
+      - default: genre           # Action, Comedy, Drama, etc.
+      - default: studio          # Warner Bros, Universal, etc.
+      - default: director        # Notable directors
+      - default: seasonal        # Holiday/seasonal collections
+
+settings:
+  cache: true
+  cache_expiration: 60
+  asset_directory: /config/assets
+  run_order:
+    - collections
+    - metadata
+    - overlays
+    - operations
