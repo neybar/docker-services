@@ -136,6 +136,12 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/downloads
+  kometa_config:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      device: :/volume1/docker/kometa
 
 ########################### SERVICES
 services:
@@ -811,3 +817,32 @@ services:
       ## HTTP Services
       - "traefik.http.routers.librespeed-rtr.service=librespeed-svc"
       - "traefik.http.services.librespeed-svc.loadbalancer.server.port=80"
+
+  # Kometa - Plex Collection Manager
+  kometa:
+    container_name: kometa
+    image: kometateam/kometa:latest
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - t2_proxy
+    volumes:
+      - kometa_config:/config
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+      - KOMETA_TIMES=05:00
+    logging: *default-logging
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.kometa-rtr.entrypoints=https"
+      - "traefik.http.routers.kometa-rtr.rule=Host(`kometa.$DOMAINNAME`)"
+      - "traefik.http.routers.kometa-rtr.tls=true"
+      ## Middlewares
+      - "traefik.http.routers.kometa-rtr.middlewares=chain-authelia@file"
+      ## HTTP Services
+      - "traefik.http.routers.kometa-rtr.service=kometa-svc"
+      - "traefik.http.services.kometa-svc.loadbalancer.server.port=4000"
