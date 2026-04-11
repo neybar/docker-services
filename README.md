@@ -1,84 +1,97 @@
-# Home Server setup
+# Home Server Docker Stack
 
-I've done a whole bunch of stuff with my server setup before writing this.  I'm probably missing steps. Bummer.
+Self-hosted services running on Docker Compose behind Traefik with Authelia SSO/2FA and a Synology NAS for storage.
 
-Here are a few guides and docs that proved invaluable:
-* [https://www.smarthomebeginner.com/traefik-2-docker-tutorial/](https://www.smarthomebeginner.com/traefik-2-docker-tutorial/)
-* [https://doc.traefik.io/traefik/](https://doc.traefik.io/traefik/) 
-* [https://docs.docker.com/compose/compose-file](https://docs.docker.com/compose/compose-file)
+## References
 
-## What's working
+- [Traefik Docker tutorial](https://www.smarthomebeginner.com/traefik-2-docker-tutorial/)
+- [Traefik docs](https://doc.traefik.io/traefik/)
+- [Docker Compose reference](https://docs.docker.com/compose/compose-file)
 
-So far this is the list of things that I'm serving:
-* Traefik + LetsEncrypt + Cloudflare for reverse proxy with SSL
-* Authelia for 2FA auth (only for external network access)
-* Portainer for giggles.  I haven't actually used it directly yet.
-* Organizr
-* Medusa
-* Calibre-Web
-* Lazy Librarian
-* PiHole -- Still in place, but I'm using NextDNS now.
-* Plex
-* SabNZB
-* Sonarr
-* Radarr
-* Hydra
-* Bazarr
-* iSponsorBlockTV
-* Home Assistant
-* Docker Socket Proxy
-* Garbage Collection
+## Services
 
-## TODO
-
-* ~Plex (currently hosted on Synology)~
-* ~SabNZB (also on Synology)~
-* [https://ombi.io/](https://ombi.io/)
-* OwnCloud / NextCloud / etc
-* HomeBridge for HomeKit (currently hosted on Synology)
-* ~Radarr~
-* Lidarr
-* Watchtower
-* GitLab
-
-## Maybe
-
-* Firefox
-* Guacamole
-* VSCode
+| Category | Service | Subdomain |
+|----------|---------|-----------|
+| Infrastructure | Traefik | `traefik.$DOMAINNAME` |
+| Infrastructure | Authelia | `authelia.$DOMAINNAME` |
+| Infrastructure | Portainer | `portainer.$DOMAINNAME` |
+| Infrastructure | Docker Socket Proxy | internal only |
+| Infrastructure | Task Scheduler | internal only |
+| Dashboard | Organizr | `start.$DOMAINNAME` |
+| Media | Plex | `plex.$DOMAINNAME` |
+| Media | Sonarr | `sonarr.$DOMAINNAME` |
+| Media | Radarr | `radarr.$DOMAINNAME` |
+| Media | Bazarr | `bazarr.$DOMAINNAME` |
+| Media | SABnzbd | `sabnzb.$DOMAINNAME` |
+| Media | NZBHydra2 | `hydra.$DOMAINNAME` |
+| Collection Mgmt | Kometa | `kometa.$DOMAINNAME` |
+| Books | Calibre-Web | `books.$DOMAINNAME` |
+| Books | Lazy Librarian | `lazylib.$DOMAINNAME` |
+| DNS | Pi-hole | `pihole.$DOMAINNAME/admin/` |
+| Home Automation | Home Assistant | `homeassistant.$DOMAINNAME` |
+| Utilities | iSponsorBlockTV | internal only |
+| Utilities | LibreSpeed | `speedtest.$DOMAINNAME` |
+| Utilities | Smokeping | `smokeping.$DOMAINNAME` |
+| Utilities | Slideshow Updater | internal only |
 
 ## Setup
 
-* `cp env.example .env`
-* Update the values in `.env`.  I'm using cloudflare for DNS.  See [https://www.smarthomebeginner.com/traefik-2-docker-tutorial/#4_Proper_DNS_Records](https://www.smarthomebeginner.com/traefik-2-docker-tutorial/#4_Proper_DNS_Records)
-* I have two config directories.  Things that aren't as finicky go on a NFS mount (to my synology).  Something just don't play nice with being on a network mount.  So I have another directory for those configs.  Ergo $DOCKERDIR and $LOCALDOCKERDIR.
-* Also I have my synology SMB mounted with the following attributes: `//$IP/audiobooks /mnt/audiobooks cifs user,vers=3.0,uid=$USER,gid=$GROUP,rw,suid,nobrl,file_mode=0600,dir_mode=0700,credentials=/etc/cifspwd 0 0`.  Replace `$IP,$USER,$GROUP` with the correct values.
-* Create networks:   
+### 1. Environment
+
+```bash
+cp env.example .env
+# Fill in all values in .env
 ```
-# docker network create t2_proxy
-# docker network create socket_proxy
-# Alternatively, you can specify the gateway and subnet to use
+
+Key variables:
+- `DOMAINNAME` — your domain (all services run as subdomains)
+- `CLOUDFLARE_EMAIL`, `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONEID` — for Let's Encrypt DNS challenge
+- `DOCKERDIR` — NFS mount path (e.g. `/mnt/docker`)
+- `LOCALDOCKERDIR` — local project directory path
+- `PLEX_TOKEN` — required for Kometa (get from Plex account settings)
+- `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
+
+### 2. Docker Networks
+
+```bash
 docker network create --gateway 192.168.90.1 --subnet 192.168.90.0/24 t2_proxy
-# docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_proxy
-# Subnet range 192.168.0.0/16 covers 192.168.0.0 to 192.168.255.255
+docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_proxy
 ```
 
-### Traefik specific
+### 3. Traefik
 
-* touch the `traefik.log` file
-* `chmod 600 traefik.log`
+```bash
+touch acme/acme.json
+chmod 600 acme/acme.json
+```
 
-### Authelia
+### 4. Kometa
 
-* [https://www.smarthomebeginner.com/docker-authelia-tutorial/](https://www.smarthomebeginner.com/docker-authelia-tutorial/)
+Copy and configure the Kometa config on your NFS mount:
+```bash
+mkdir -p /mnt/docker/kometa/assets
+cp kometa/config.yml.example /mnt/docker/kometa/config.yml
+```
 
-### pihole
+Token values are read from environment — no edits needed if `.env` is populated.
 
-* `touch pihole/pihole.log`
+### 5. Portainer
 
-### portainer
+After first start: Settings → Environments → Add Environment → Docker → set URL to `socket-proxy:2375`.
 
-* After running for the first time, add a new docker endpoint and set the url to socket-proxy:2375
-* Settings -> Endpoints -> Add Endpoint -> Docker.
-* Fill in "Endpoint URL" with `socket-proxy:2375` and give it a name
-* Not sure if this is required but I removed the "primary" endpoint since the docker.sock was not available any more
+### 6. Start Everything
+
+```bash
+docker compose up -d
+```
+
+## Maintenance
+
+Task Scheduler handles routine maintenance automatically:
+- **Nightly at midnight**: Docker cleanup (prunes images/containers/volumes older than 7 days)
+- **Sundays at 3 AM**: Plex restart (picks up `VERSION=public` updates)
+- **Daily at 1 AM**: Kometa runs and updates Plex collections
+
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the automated task workflow using `ralph.sh`.
