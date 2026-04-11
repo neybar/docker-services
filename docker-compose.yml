@@ -834,8 +834,7 @@ services:
       - PGID=$PGID
       - TZ=$TZ
       - KOMETA_TIMES=01:00
-      - PLEX_TOKEN=$PLEX_TOKEN
-      - TMDB_API_READ_ACCESS_TOKEN=$TMDB_API_READ_ACCESS_TOKEN
+      - KOMETA_PLEX_TOKEN=$PLEX_TOKEN
     logging: *default-logging
     labels:
       - "traefik.enable=true"
