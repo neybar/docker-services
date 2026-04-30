@@ -401,7 +401,6 @@ services:
     container_name: isponsorblocktv
     image: ghcr.io/dmunozv04/isponsorblocktv
     restart: unless-stopped
-    network_mode: host
     security_opt:
       - no-new-privileges:true
     volumes:
