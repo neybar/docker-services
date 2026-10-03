@@ -104,5 +104,18 @@ All containers use `*default-logging` (json-file, 10MB max, 3 files). Applicatio
   services tolerate this; H2 does not. `stop_grace_period: 120s` is required so H2 can compact on shutdown.
   The path is not independently configurable — H2's URL is `${nzbhydra.dataFolder}/database/nzbhydra` — hence
   the nested mount. Do not relocate it to `/home` or `$LOCALDOCKERDIR`; `/dev/sda` is throwing media errors.
-- **Pi-hole**: Host port 53 — may conflict with systemd-resolved
+- **Pi-hole**: Host port 53. No systemd-resolved conflict — `DNSStubListener=no` is already set in
+  `/etc/systemd/resolved.conf`. **Cold standby only** — NextDNS serves live DNS (host resolvers are
+  `45.90.28.234`/`45.90.30.234`) and nothing points at Pi-hole; it is kept in case NextDNS is dropped.
+  Runs v6, which reads **only** `FTLCONF_<section>_<setting>` env vars — all v5-style vars
+  (`WEBPASSWORD`, `DNS1`, `ServerIP`, `PUID`/`PGID`, `CONDITIONAL_FORWARDING*`, …) are silently ignored.
+  `PUID`/`PGID` in particular are a LinuxServer.io convention the official image does not implement: it
+  starts as root and FTL drops to its own `pihole` user (uid 1000). The live config lives in
+  `pihole.toml`, which is **gitignored and on the failing `/dev/sda`**, so the settings that matter are
+  restated as `FTLCONF_*` in compose to keep them reproducible. Settings supplied via env become
+  read-only in the web UI. FTL's long-term query database is off (`FTLCONF_database_maxDBdays: "0"`) —
+  it had reached 1.46GB on `/dev/sda` and corrupted itself with unreadable pages. `gravity.db` (the
+  blocklist, ~86k domains, refreshed by in-container cron Sundays 04:26) is what makes the standby
+  usable — keep that one. v6 logs to the `/var/log/pihole/` **directory** and those logs are not
+  persisted; the old single-file `pihole.log` bind mount was a v5 path and did nothing.
 - **Home Assistant**: Privileged mode with host network (required for device access)
