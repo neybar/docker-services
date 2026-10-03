@@ -730,31 +730,26 @@ services:
       - "53:53/tcp"
       - "53:53/udp"
     environment:
-      PUID: $PUID
-      PGID: $PGID
       TZ: $TZ
-      WEBPASSWORD: $PIHOLE_PWD
-      VIRTUAL_HOST: pihole.$DOMAINNAME
-      DNS1: 1.1.1.1
-      DNS2: 1.0.0.1
-      ADMIN_EMAIL: $EMAIL
-      ServerIP: $HOST_IP
-      PROXY_LOCATION: pihole.$DOMAINNAME
-      DNSMASQ_USER: pihole
-      DNSSEC: "true"
-      CONDITIONAL_FORWARDING: "true"
-      CONDITIONAL_FORWARDING_IP: 192.168.0.1
-      CONDITIONAL_FORWARDING_DOMAIN: home.$DOMAINNAME
-      CONDITIONAL_FORWARDING_REVERSE: 0.168.192.in-addr.arpa
-      # Pi-hole is a cold standby (NextDNS serves live DNS; nothing points here).
-      # 0 disables FTL's long-term query database entirely - it had grown to 1.46GB
-      # on /dev/sda, which is throwing media errors, and corrupted itself.
+      # Pi-hole v6 only reads FTLCONF_<section>_<setting>. The v5-era vars that used
+      # to be here (PUID/PGID/WEBPASSWORD/VIRTUAL_HOST/DNS1/DNS2/ADMIN_EMAIL/ServerIP/
+      # PROXY_LOCATION/DNSMASQ_USER/DNSSEC/CONDITIONAL_FORWARDING*) were all silently
+      # ignored -- the live config came from pihole.toml, migrated out of setupVars.conf
+      # in Mar 2025. The vars below restate the values already in effect; they are here
+      # because pihole.toml is gitignored and lives on /dev/sda, which is failing.
+      # Settings supplied via env become read-only in the web UI.
+      FTLCONF_webserver_api_password: $PIHOLE_PWD
+      FTLCONF_dns_upstreams: "1.1.1.1;1.0.0.1"
+      FTLCONF_dns_dnssec: "true"
+      FTLCONF_dns_revServers: "true,192.168.0.0/24,192.168.0.1,home.$DOMAINNAME"
+      # Cold standby (NextDNS serves live DNS; nothing points here), so query history
+      # has no value. 0 disables FTL's long-term database -- it had reached 1.46GB on
+      # the failing disk and corrupted itself.
       FTLCONF_database_maxDBdays: "0"
     logging: *default-logging
     volumes:
       - $LOCALDOCKERDIR/pihole/pihole:/etc/pihole
       - $LOCALDOCKERDIR/pihole/dnsmasq.d:/etc/dnsmasq.d
-      - $LOCALDOCKERDIR/pihole/pihole.log:/var/log/pihole.log
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
