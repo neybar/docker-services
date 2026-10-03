@@ -25,7 +25,9 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 
 ### Storage
 - **NFS volumes** (Synology at 192.168.0.6): Service configs and media libraries
-- **Local NVME** (`/usr/local/plex`, `/tmp/plex_transcode`): Plex config and transcode scratch
+- **Local NVME** (`/usr/local/plex`, `/tmp/plex_transcode`): Plex config and transcode scratch.
+  `/usr/local/plex` holds the 13GB Plex library database and is **in no backup** — a rebuild
+  silently starts Plex with an empty library. See `REBUILD.md` §5-6.
 - **Local NVME** (`/usr/local/nzbhydra2/database`): NZBHydra2's H2 database — mounted at `/config/database`,
   nested inside the NFS `/config`. Embedded random-access databases must not live on NFS (see Notes).
 
@@ -48,6 +50,9 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 - `env.example` — Required environment variables (copy to `.env`)
 - `kometa/config.yml.example` — Kometa collection manager config template
 - `scripts/validate-traefik.sh` — Post-change validation script
+- `REBUILD.md` — **Bringing this stack up on a fresh host.** Host prerequisites, the Synology
+  mounts and `resolved.conf` changes that are *not* in this repo, which local paths hold
+  irreplaceable state, and what is still missing for an unattended rebuild.
 - `acme/acme.json` — Let's Encrypt certs (Traefik-managed, chmod 600)
 
 ## Environment Variables
@@ -57,7 +62,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | `DOMAINNAME` | Primary domain for all subdomains |
 | `CLOUDFLARE_EMAIL`, `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONEID` | DNS challenge |
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
-| `LOCALDOCKERDIR` | Local storage path (e.g. `/home/user/Projects/docker-services`) |
+| `LOCALDOCKERDIR` | Local storage path. **Currently on `/dev/sda`, which is failing** — do not put new service data here; use a path under `/` (NVMe). See `REBUILD.md` §5 |
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `HOST_IP` | Host IP for DSM access through Traefik |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa) |
