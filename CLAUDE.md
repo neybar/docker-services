@@ -26,6 +26,8 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 ### Storage
 - **NFS volumes** (Synology at 192.168.0.6): Service configs and media libraries
 - **Local NVME** (`/usr/local/plex`, `/tmp/plex_transcode`): Plex config and transcode scratch
+- **Local NVME** (`/usr/local/nzbhydra2/database`): NZBHydra2's H2 database — mounted at `/config/database`,
+  nested inside the NFS `/config`. Embedded random-access databases must not live on NFS (see Notes).
 
 ### Services
 
@@ -94,5 +96,13 @@ All containers use `*default-logging` (json-file, 10MB max, 3 files). Applicatio
 - **Plex**: LinuxServer.io image with `/dev/dri` GPU transcoding; `VERSION=public` enables auto-updates on container restart
 - **Task Scheduler**: Docker cleanup nightly at midnight; Plex restart Sundays at 3 AM
 - **Kometa**: Runs daily at 1 AM; reads `PLEX_TOKEN` and `TMDB_API_READ_ACCESS_TOKEN` from env; config at `/mnt/docker/kometa/config.yml`
+- **NZBHydra2 (hydra)**: H2 database lives on local NVME at `/usr/local/nzbhydra2/database`, *not* NFS.
+  The Synology periodically revokes NFSv4 lock state (`NFS: : lost 3 locks` in `dmesg`, ~every 9 days);
+  the kernel surfaces that as EIO (`recover_lost_locks` is off by default), and H2 treats any I/O error as
+  fatal with no reopen path, so one blip wedges the DB until the container restarts
+  ([h2database#1954](https://github.com/h2database/h2database/issues/1954), open since 2019). SQLite-based
+  services tolerate this; H2 does not. `stop_grace_period: 120s` is required so H2 can compact on shutdown.
+  The path is not independently configurable — H2's URL is `${nzbhydra.dataFolder}/database/nzbhydra` — hence
+  the nested mount. Do not relocate it to `/home` or `$LOCALDOCKERDIR`; `/dev/sda` is throwing media errors.
 - **Pi-hole**: Host port 53 — may conflict with systemd-resolved
 - **Home Assistant**: Privileged mode with host network (required for device access)

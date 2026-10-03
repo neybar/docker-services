@@ -579,12 +579,16 @@ services:
     container_name: hydra
     image: lscr.io/linuxserver/nzbhydra2:latest
     restart: unless-stopped
+    # Give H2 time to compact the DB on shutdown (upstream requirement as of v9.0.0)
+    stop_grace_period: 120s
     networks:
       - t2_proxy
     security_opt:
       - no-new-privileges:true
     volumes:
       - hydra_config:/config
+      # NVME - H2 cannot survive NFSv4 lock revocation; see CLAUDE.md Storage
+      - /usr/local/nzbhydra2/database:/config/database
       - downloads:/downloads
     environment:
       - PUID=$PUID
