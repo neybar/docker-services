@@ -746,6 +746,10 @@ services:
       CONDITIONAL_FORWARDING_IP: 192.168.0.1
       CONDITIONAL_FORWARDING_DOMAIN: home.$DOMAINNAME
       CONDITIONAL_FORWARDING_REVERSE: 0.168.192.in-addr.arpa
+      # Pi-hole is a cold standby (NextDNS serves live DNS; nothing points here).
+      # 0 disables FTL's long-term query database entirely - it had grown to 1.46GB
+      # on /dev/sda, which is throwing media errors, and corrupted itself.
+      FTLCONF_database_maxDBdays: "0"
     logging: *default-logging
     volumes:
       - $LOCALDOCKERDIR/pihole/pihole:/etc/pihole

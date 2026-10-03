@@ -104,5 +104,11 @@ All containers use `*default-logging` (json-file, 10MB max, 3 files). Applicatio
   services tolerate this; H2 does not. `stop_grace_period: 120s` is required so H2 can compact on shutdown.
   The path is not independently configurable — H2's URL is `${nzbhydra.dataFolder}/database/nzbhydra` — hence
   the nested mount. Do not relocate it to `/home` or `$LOCALDOCKERDIR`; `/dev/sda` is throwing media errors.
-- **Pi-hole**: Host port 53 — may conflict with systemd-resolved
+- **Pi-hole**: Host port 53 — may conflict with systemd-resolved. **Cold standby only** — NextDNS serves
+  live DNS and nothing points at Pi-hole; it is kept in case NextDNS is dropped. FTL's long-term query
+  database is disabled via `FTLCONF_database_maxDBdays: "0"` in compose: it had grown to 1.46GB on
+  `/dev/sda` (which throws media errors) and corrupted itself with unreadable pages. `gravity.db` (the
+  blocklist, ~86k domains) is what makes the standby usable — keep that one. Note the `WEBPASSWORD`,
+  `DNS1`, `ServerIP`, `CONDITIONAL_FORWARDING*` env vars are Pi-hole v5 style and inert on v6; v6 reads
+  `pihole.toml` or `FTLCONF_*` env vars. Settings set via env become read-only in the web UI.
 - **Home Assistant**: Privileged mode with host network (required for device access)
