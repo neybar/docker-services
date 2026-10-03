@@ -1,5 +1,20 @@
 # Fix SQLite-over-NFS Crashes
 
+> **STOP — read before executing (2026-10-03).**
+>
+> 1. **`LOCALDOCKERDIR` currently resolves to `/home/jalance/Projects/docker-services`, which is
+>    on `/dev/sda` — a failing disk** (957 reallocated sectors, ~85% of the spare pool gone,
+>    65,535+ SATA link drops). Running this plan as written would move ~85GB of service
+>    databases onto it. Repoint `LOCALDOCKERDIR` to a path under `/` (the healthy NVMe) first.
+> 2. **NZBHydra2 is already done** and is the reference implementation — see `REBUILD.md` §5
+>    and the NZBHydra2 note in `CLAUDE.md`. Only its `/config/database` subdirectory moved, via
+>    a nested bind mount, so config/logs/backups stay on the NAS. Note it also needed
+>    `stop_grace_period: 120s`.
+> 3. The root cause is broader than SQLite: the Synology periodically revokes NFSv4 lock state
+>    (`NFS: : lost 3 locks`, roughly every 9 days) and the kernel surfaces that as `EIO`.
+>    SQLite recovers by reopening; H2 does not. Mount options cannot fix it.
+> 4. `.claude/plans/typed-wondering-hennessy.md`, referenced below, no longer exists.
+
 Sonarr and Radarr are experiencing recurring SQLite `disk I/O error` crashes because their
 databases live on NFS. The fix is to move ALL service configs (~85GB) to local NVME storage
 and rsync to Synology NAS every 4 hours.
