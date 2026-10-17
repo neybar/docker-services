@@ -838,14 +838,3 @@ services:
       - KOMETA_TIMES=01:00
       - KOMETA_PLEX_TOKEN=$PLEX_TOKEN
     logging: *default-logging
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.kometa-rtr.entrypoints=https"
-      - "traefik.http.routers.kometa-rtr.rule=Host(`kometa.$DOMAINNAME`)"
-      - "traefik.http.routers.kometa-rtr.tls=true"
-      ## Middlewares
-      - "traefik.http.routers.kometa-rtr.middlewares=chain-authelia@file"
-      ## HTTP Services
-      - "traefik.http.routers.kometa-rtr.service=kometa-svc"
-      - "traefik.http.services.kometa-svc.loadbalancer.server.port=4000"

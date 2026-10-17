@@ -78,7 +78,6 @@ SERVICES=(
     "speedtest"          # LibreSpeed
     "homebridge"
     "home"               # DSM (Synology)
-    "kometa"
 )
 
 # Function to print test result
