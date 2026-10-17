@@ -24,7 +24,7 @@ Self-hosted services running on Docker Compose behind Traefik with Authelia SSO/
 | Media | Bazarr | `bazarr.$DOMAINNAME` |
 | Media | SABnzbd | `sabnzb.$DOMAINNAME` |
 | Media | NZBHydra2 | `hydra.$DOMAINNAME` |
-| Collection Mgmt | Kometa | `kometa.$DOMAINNAME` |
+| Collection Mgmt | Kometa | internal only (no web UI) |
 | Books | Calibre-Web | `books.$DOMAINNAME` |
 | Books | Lazy Librarian | `lazylib.$DOMAINNAME` |
 | DNS | Pi-hole | `pihole.$DOMAINNAME/admin/` |
