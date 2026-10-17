@@ -121,16 +121,16 @@ broken until the process restarts
 ([h2database#1954](https://github.com/h2database/h2database/issues/1954), open
 since 2019). SQLite-based services survive because they reopen and retry.
 
-### Do not point local storage at /home
+### /home disk
 
-`/dev/sda` (the Samsung 870 EVO holding `/home`) is failing: 957 reallocated
-sectors, ~85% of the spare pool consumed, and 65,535+ SATA PhyRdy→PhyNRdy
-transitions. `/` and `/var/lib/docker` are on the healthy NVMe.
+`/home` was on a Samsung 870 EVO that failed (957 reallocated sectors, 15k+
+uncorrectable errors, eventually refusing writes). On 2026-10-17 it was
+replaced by a 1TB TeamGroup T-Force Vulcan Z SATA SSD (ext4, label `home`,
+UUID `24be54cb-fcbc-4868-907d-c290dd2729a8`) and `/home` was copied over.
+`/` and `/var/lib/docker` are on the NVMe.
 
-`LOCALDOCKERDIR` currently resolves to `/home/jalance/Projects/docker-services`
-— on that failing disk. **`TODO-local-configs.md` proposes moving ~85GB of
-service configs to `$LOCALDOCKERDIR`; do not run that plan until the variable
-points at the NVMe.**
+`LOCALDOCKERDIR` resolves to `/home/jalance/Projects/docker-services`, on the
+new SSD. The failing-disk hold on `TODO-local-configs.md` no longer applies.
 
 ---
 

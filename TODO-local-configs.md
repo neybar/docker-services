@@ -2,10 +2,8 @@
 
 > **STOP — read before executing (2026-10-03).**
 >
-> 1. **`LOCALDOCKERDIR` currently resolves to `/home/jalance/Projects/docker-services`, which is
->    on `/dev/sda` — a failing disk** (957 reallocated sectors, ~85% of the spare pool gone,
->    65,535+ SATA link drops). Running this plan as written would move ~85GB of service
->    databases onto it. Repoint `LOCALDOCKERDIR` to a path under `/` (the healthy NVMe) first.
+> 1. ~~`LOCALDOCKERDIR` is on a failing disk~~ — resolved 2026-10-17: `/home` (and so
+>    `LOCALDOCKERDIR`) moved to a new 1TB SATA SSD after the 870 EVO failed. See `REBUILD.md` §5.
 > 2. **NZBHydra2 is already done** and is the reference implementation — see `REBUILD.md` §5
 >    and the NZBHydra2 note in `CLAUDE.md`. Only its `/config/database` subdirectory moved, via
 >    a nested bind mount, so config/logs/backups stay on the NAS. Note it also needed

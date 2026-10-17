@@ -62,7 +62,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | `DOMAINNAME` | Primary domain for all subdomains |
 | `CLOUDFLARE_EMAIL`, `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONEID` | DNS challenge |
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
-| `LOCALDOCKERDIR` | Local storage path. **Currently on `/dev/sda`, which is failing** — do not put new service data here; use a path under `/` (NVMe). See `REBUILD.md` §5 |
+| `LOCALDOCKERDIR` | Local storage path (`/home/jalance/Projects/docker-services`, on the 1TB TeamGroup SATA SSD that replaced the failed 870 EVO on 2026-10-17). See `REBUILD.md` §5 |
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `HOST_IP` | Host IP for DSM access through Traefik |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa) |
@@ -108,7 +108,7 @@ All containers use `*default-logging` (json-file, 10MB max, 3 files). Applicatio
   ([h2database#1954](https://github.com/h2database/h2database/issues/1954), open since 2019). SQLite-based
   services tolerate this; H2 does not. `stop_grace_period: 120s` is required so H2 can compact on shutdown.
   The path is not independently configurable — H2's URL is `${nzbhydra.dataFolder}/database/nzbhydra` — hence
-  the nested mount. Do not relocate it to `/home` or `$LOCALDOCKERDIR`; `/dev/sda` is throwing media errors.
+  the nested mount.
 - **Pi-hole**: Host port 53. No systemd-resolved conflict — `DNSStubListener=no` is already set in
   `/etc/systemd/resolved.conf`. **Cold standby only** — NextDNS serves live DNS (host resolvers are
   `45.90.28.234`/`45.90.30.234`) and nothing points at Pi-hole; it is kept in case NextDNS is dropped.
@@ -116,11 +116,11 @@ All containers use `*default-logging` (json-file, 10MB max, 3 files). Applicatio
   (`WEBPASSWORD`, `DNS1`, `ServerIP`, `PUID`/`PGID`, `CONDITIONAL_FORWARDING*`, …) are silently ignored.
   `PUID`/`PGID` in particular are a LinuxServer.io convention the official image does not implement: it
   starts as root and FTL drops to its own `pihole` user (uid 1000). The live config lives in
-  `pihole.toml`, which is **gitignored and on the failing `/dev/sda`**, so the settings that matter are
+  `pihole.toml`, which is **gitignored** (it lives under `$LOCALDOCKERDIR`), so the settings that matter are
   restated as `FTLCONF_*` in compose to keep them reproducible. Settings supplied via env become
   read-only in the web UI. FTL's long-term query database is off (`FTLCONF_database_maxDBdays: "0"`) —
-  it had reached 1.46GB on `/dev/sda` and corrupted itself with unreadable pages. `gravity.db` (the
-  blocklist, ~86k domains, refreshed by in-container cron Sundays 04:26) is what makes the standby
+  it had reached 1.46GB on the old (since failed) /home SSD and corrupted itself with unreadable pages.
+  `gravity.db` (the blocklist, ~86k domains, refreshed by in-container cron Sundays 04:26) is what makes the standby
   usable — keep that one. v6 logs to the `/var/log/pihole/` **directory** and those logs are not
   persisted; the old single-file `pihole.log` bind mount was a v5 path and did nothing.
 - **Home Assistant**: Privileged mode with host network (required for device access)
