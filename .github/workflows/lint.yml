@@ -1,10 +1,15 @@
 name: Lint and Validate
 
+# PR validation runs on GitHub-hosted runners only. Never use the self-hosted
+# runner here: this workflow runs code from pull requests. See docs/DEPLOY.md.
 on:
   push:
     branches: [ master, traefikv3 ]
   pull_request:
     branches: [ master ]
+
+permissions:
+  contents: read
 
 jobs:
   shellcheck:
@@ -16,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
+        uses: ludeeus/action-shellcheck@2.0.0
         with:
           scandir: '.'
           severity: info
@@ -31,6 +36,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # scripts/validate-traefik.sh is not run here: it probes the live services
+      # through Traefik and needs the real domain and HOST_IP.
+      - name: Create dummy .env from env.example
+        run: sed 's/=$/=dummy/' env.example > .env
 
       - name: Validate docker-compose.yml
         run: docker compose config --quiet
