@@ -225,7 +225,7 @@ Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowds
 *then* revert the PR. Reverting first auto-deploys and removes the mount (so `crowdsec@file`) while the NFS chains still reference it, so every chained router breaks.
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
-`docker compose exec crowdsec cscli bouncers delete traefik`, and delete every `traefik@<ip>` entry too (CrowdSec creates these when the same key connects from a new IP; `cscli bouncers list` shows them), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
+`docker compose exec crowdsec cscli bouncers delete traefik` (this also deletes every auto-created `traefik@<ip>` entry; CrowdSec refuses to delete those on their own), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
 run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 without Content-Length) are blocked, not passed (`crowdsecAppsecUnreadableBodyBlock=true`, the plugin default). Fail-open means a key mismatch silently disables the WAF; `validate-waf.sh` is what detects it.
 
 Docker access: none. CrowdSec does not read Authelia logs: the only way without a log file was Docker API access, which cannot be scoped below
