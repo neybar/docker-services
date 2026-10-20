@@ -188,7 +188,7 @@ docker compose up -d
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
 3. Nothing to create for Traefik's dynamic config: the chains (each starting with `crowdsec@file`), the `middlewares-*`, `crowdsec@file`
    and the Synology/Homebridge routers are all in `traefik-rules/`, mounted read-only at `/rules`. Not watched (it is the git checkout): `deploy.sh`
-   restarts traefik when a deploy changes `traefik-rules/`; after a hand edit, `docker compose restart traefik`.
+   restarts traefik when anything in `traefik-rules/` is newer than its last start; after a hand edit, `docker compose restart traefik`.
    Traefik no longer uses the NFS `/mnt/docker/traefik3` volume.
 4. A Traefik restart costs ~2s of connection refused, with no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
