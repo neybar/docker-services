@@ -61,11 +61,6 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/sabnzb
-  traefik_config:
-    driver_opts:
-      type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
-      device: :/volume1/docker/traefik3
   traefik_acme_config:
     driver_opts:
       type: nfs
@@ -143,6 +138,15 @@ volumes:
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/kometa
 
+######### SECRETS
+# Compose-level guard: an empty bouncer key fails closed (plugin rejects it, crowdsec@file is never built, every chained router breaks),
+# so refuse to render the config at all. Extension field, unused otherwise.
+x-require-crowdsec-bouncer-key: ${CROWDSEC_BOUNCER_KEY:?set CROWDSEC_BOUNCER_KEY in .env (openssl rand -hex 32); an empty key fails closed}
+
+secrets:
+  crowdsec_bouncer_key:
+    environment: CROWDSEC_BOUNCER_KEY
+
 ########################### SERVICES
 services:
   ############################# FRONTENDS
@@ -163,34 +167,46 @@ services:
       - --global.checkNewVersion=true
       - --global.sendAnonymousUsage=true
       - --entryPoints.http.address=:80
+      - --entryPoints.http.asDefault=true # ping is not default; routers without entryPoints use http, https, dsm-admin
       - --entryPoints.https.address=:443
+      - --entryPoints.https.asDefault=true
       - --entryPoints.https.http3=true
       - --entryPoints.https.http3.advertisedPort=443
       - --entryPoints.dsm-admin.address=:5001
+      - --entryPoints.dsm-admin.asDefault=true
         # Allow these IPs to set the X-Forwarded-* headers - Cloudflare IPs: https://www.cloudflare.com/ips/
       - --entrypoints.https.forwardedHeaders.trustedIPs=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/12,172.64.0.0/13,131.0.72.0/22
-      - --entryPoints.traefik.address=:8080
+      - --entryPoints.ping.address=:8082 # Ping only; not published
       - --api=true
 #      - --api.insecure=true
 #      - --serversTransport.insecureSkipVerify=true
       - --log=true
       - --log.level=ERROR # (Default: error) DEBUG, INFO, WARN, ERROR, FATAL, PANIC
+      - --ping=true # Health endpoint, used by the healthcheck below
+      - --ping.entryPoint=ping # Own unpublished entrypoint
       - --accessLog=true
+      # Full access log (no status filter) on local disk: CrowdSec reads it, and its scenarios need 2xx/3xx too.
+      # Rotated daily by task-scheduler (traefik-logrotate.sh): copy, then truncate in place (Traefik opens the file O_APPEND).
+      - --accessLog.filePath=/logs/access.log
       - --accessLog.bufferingSize=100 # Configuring a buffer of 100 lines
-      - --accessLog.filters.statusCodes=400-499
       - --providers.docker=true
       # - --providers.docker.endpoint=unix:///var/run/docker.sock
       - --providers.docker.endpoint=tcp://socket-proxy:2375
       - --providers.docker.defaultrule=Host(`{{ index .Labels "com.docker.compose.service" }}.$DOMAINNAME`)
       - --providers.docker.exposedByDefault=false
       - --providers.docker.network=t2_proxy
-      - --providers.file.directory=/config/rules # Load dynamic configuration from YAML files in a directory
-      - --providers.file.watch=true # Only works on top level files in the rules folder
+      # Dynamic config (chains, middlewares, crowdsec, file-provider routers) is tracked in ./traefik-rules, on local disk.
+      - --providers.file.directory=/rules
+      # Not watched on purpose: ./traefik-rules is this git checkout, so a watch would apply every branch switch to production
+      # (and a switch to a commit without the directory leaves the bind mount stale). deploy.sh restarts traefik when it is newer than traefik's start.
+      - --providers.file.watch=false
       # - --certificatesResolvers.dns-cloudflare.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory # LetsEncrypt Staging Server - uncomment when testing
       - --certificatesResolvers.dns-cloudflare.acme.email=$CLOUDFLARE_EMAIL
       - --certificatesResolvers.dns-cloudflare.acme.storage=/config/acme/acme.json
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+      # CrowdSec bouncer/AppSec plugin, vendored in ./plugins-local (see plugins-local/README.md). Local so Traefik never downloads it.
+      - --experimental.localPlugins.crowdsec-bouncer.moduleName=github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
     networks:
       t2_proxy:
         # ipv4_address: 192.168.90.254 # You can specify a static IP
@@ -213,21 +229,35 @@ services:
         published: 443
         protocol: udp
         mode: host
-      - target: 8080
-        published: 8080
-        protocol: tcp
-        mode: host
       - target: 5001
         published: 5001
         protocol: tcp
         mode: host
     volumes:
-      - traefik_config:/config
       # - traefik_acme_config:/config/acme:ro
       - $LOCALDOCKERDIR/acme:/config/acme
+      - $LOCALDOCKERDIR/plugins-local:/plugins-local:ro
+      - $LOCALDOCKERDIR/traefik-logs:/logs
+      # All file-provider rules, tracked in git. A directory, not single files: a single-file bind mount pins the inode,
+      # so an editor/git/cp that replaces the file leaves Traefik on the old one.
+      - $LOCALDOCKERDIR/traefik-rules:/rules:ro
     environment:
       - CF_API_EMAIL=$CLOUDFLARE_EMAIL
       - CF_API_KEY=$CLOUDFLARE_API_KEY
+      - DOMAINNAME=$DOMAINNAME # used by {{ env "DOMAINNAME" }} templates in ./traefik-rules
+    # Bouncer key as a file, not a label: labels are visible in `docker inspect` and the dashboard
+    secrets:
+      - crowdsec_bouncer_key
+    healthcheck:
+      # healthcheck does not see the daemon's flags, so repeat the ping entrypoint here (keep in sync with the command above)
+      test: ["CMD", "traefik", "healthcheck", "--ping", "--ping.entryPoint=ping", "--entryPoints.ping.address=:8082"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Traefik's docker provider skips containers that are not `healthy`, traefik itself included, so its label-defined
+      # config (redirect-to-https, the traefik-rtr router) is missing until the first check passes. Poll fast at start to shrink that window.
+      start_period: 30s
+      start_interval: 1s
     logging: *default-logging
     labels:
       - "traefik.enable=true"
@@ -248,6 +278,39 @@ services:
       ## Middlewares
       # - "traefik.http.routers.traefik-rtr.middlewares=chain-basic-auth@file"
       - "traefik.http.routers.traefik-rtr.middlewares=chain-authelia@file"
+
+  # CrowdSec - Security Engine: reads the Traefik access log (no Docker API access; Authelia logs are not read), bans attackers (bouncer in Traefik enforces)
+  # Config + SQLite DB live on local disk, not NFS. Pre-registers the Traefik bouncer key on first start.
+  crowdsec:
+    container_name: crowdsec
+    image: crowdsecurity/crowdsec:v1.8.1
+    restart: unless-stopped
+    networks:
+      - t2_proxy
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - $LOCALDOCKERDIR/crowdsec/config:/etc/crowdsec
+      - $LOCALDOCKERDIR/crowdsec/data:/var/lib/crowdsec/data
+      - $LOCALDOCKERDIR/crowdsec-config/acquis.d:/etc/crowdsec/acquis.d:ro
+      - $LOCALDOCKERDIR/traefik-logs:/var/log/traefik:ro
+    environment:
+      - TZ=$TZ
+      - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/base-http-scenarios crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules crowdsecurity/appsec-crs
+      - PARSERS=crowdsecurity/whitelists # Parser, not a collection
+      # Space-separated. http-crawl-non_statics: with the full access log and *arr/Organizr UIs (many non-static requests per page) it would ban our own WAN IP.
+      # crowdsec-appsec-outofband: CRS out-of-band is alerts only until tuned (re-enable with crs-inband, REBUILD.md section 8)
+      - DISABLE_SCENARIOS=crowdsecurity/http-crawl-non_statics crowdsecurity/crowdsec-appsec-outofband
+    secrets: # /docker_start.sh registers /run/secrets/bouncer_key_<name> as bouncer <name> (keeps the key out of `env`/docker inspect)
+      - source: crowdsec_bouncer_key
+        target: bouncer_key_traefik
+    healthcheck: # The image ships none
+      test: ["CMD", "cscli", "lapi", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
 
   # Docker Socket Proxy - Security Enchanced Proxy for Docker Socket
   socket-proxy:
@@ -351,6 +414,7 @@ services:
   # Task Scheduler - Scheduled maintenance tasks
   # - Daily at midnight: Docker cleanup (prune images/containers/volumes older than 7 days)
   # - Sunday at 3 AM: Plex restart (picks up VERSION=public updates)
+  # - Daily at 00:10: Traefik access log rotation (copytruncate; keeps current + 2 rotated)
   task-scheduler:
     build: $LOCALDOCKERDIR/task-scheduler
     container_name: task-scheduler
@@ -359,6 +423,8 @@ services:
       - socket_proxy
     depends_on:
       - socket-proxy
+    volumes:
+      - $LOCALDOCKERDIR/traefik-logs:/traefik-logs # Traefik access log rotation
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375

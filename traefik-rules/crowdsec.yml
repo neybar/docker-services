@@ -1,0 +1,33 @@
+# CrowdSec bouncer/AppSec middleware (Traefik plugin, vendored in ./plugins-local), referenced by the chains in
+# middleware-chains.yml as crowdsec@file. traefik-rules/ is the file provider directory (/rules, read-only, not watched:
+# deploy.sh restarts traefik when anything here is newer than its last start; by hand, `docker compose restart traefik`).
+# It used to be defined by labels on the traefik service (crowdsec@docker); the docker provider skips Traefik
+# itself until its healthcheck passes, so the chains 404ed for a few seconds at every start.
+#
+# Stream mode: banned IPs are cached locally and refreshed from the LAPI every 60s.
+# FAIL OPEN: if CrowdSec is down, traffic passes (updateMaxFailure=-1, AppSec failure/unreachable Block=false);
+# Authelia remains the auth layer. Unreadable bodies are blocked, not passed (plugin default, pinned explicitly).
+# The bouncer key is read from the compose secret file, not set here.
+http:
+  middlewares:
+    crowdsec:
+      plugin:
+        crowdsec-bouncer:
+          enabled: true
+          crowdsecMode: stream
+          crowdsecLapiHost: crowdsec:8080
+          crowdsecLapiKeyFile: /run/secrets/crowdsec_bouncer_key
+          updateMaxFailure: -1
+          streamStartupBlock: false
+          # AppSec (WAF) on crowdsec:7422. Fails open only if AppSec is unreachable or answers 500/502/503/504; any other error (e.g. 401 for an
+          # unknown key) blocks. Unreadable bodies are blocked (plugin default); the AppSec key defaults to the LAPI key.
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: crowdsec:7422
+          crowdsecAppsecFailureBlock: false
+          crowdsecAppsecUnreachableBlock: false
+          # Bodies the plugin cannot read (HTTP/2/3 without Content-Length) would otherwise reach AppSec header-only,
+          # bypassing body inspection, so they are blocked. This is the plugin default, pinned explicitly.
+          crowdsecAppsecUnreadableBodyBlock: true
+          # httpTimeoutSeconds is left at the plugin default (10s). With fail-open, a request whose AppSec call times out passes
+          # uninspected, so a short timeout would let an attacker pad a body to make AppSec exceed it. The cost: if CrowdSec is
+          # slow (not down), requests wait up to 10s for AppSec; timeout -> pass is inherent to fail-open.

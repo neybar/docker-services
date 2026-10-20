@@ -20,14 +20,17 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 
 ### Security Stack
 1. **Traefik** — Reverse proxy, Let's Encrypt certs via Cloudflare DNS challenge
-2. **Docker Socket Proxy** — Restricts Docker API access (never expose the socket directly)
-3. **Authelia** — SSO/2FA on all external-facing services via `chain-authelia@file` middleware
+2. **Docker Socket Proxy** — Restricts Docker API access (never expose the socket directly). CrowdSec has **no** Docker API access
+3. **CrowdSec** — Traefik bouncer plugin (bans) + AppSec WAF, first entry of every middleware chain, so banned IPs and attack payloads are stopped before Authelia. Not every router: file-provider router `dsm-photo-rtr` bypasses it (see CrowdSec notes)
+4. **Authelia** — SSO/2FA on all external-facing services via `chain-authelia@file` middleware
 
 ### Storage
 - **NFS volumes** (Synology at 192.168.0.6): Service configs and media libraries
 - **Local NVME** (`/usr/local/plex`, `/tmp/plex_transcode`): Plex config and transcode scratch.
   `/usr/local/plex` holds the 13GB Plex library database and is **in no backup** — a rebuild
   silently starts Plex with an empty library. See `REBUILD.md` §5-6.
+- **Local disk** (`$LOCALDOCKERDIR/crowdsec/{config,data}`, `$LOCALDOCKERDIR/traefik-logs`): CrowdSec config + SQLite DB
+  and Traefik's access log. Gitignored. Regenerable — losing it loses only decisions/alerts history.
 - **Local NVME** (`/usr/local/nzbhydra2/database`): NZBHydra2's H2 database — mounted at `/config/database`,
   nested inside the NFS `/config`. Embedded random-access databases must not live on NFS (see Notes).
 
@@ -35,7 +38,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 
 | Category | Services |
 |----------|----------|
-| Infrastructure | Traefik, Socket Proxy, Authelia, Portainer, Task Scheduler |
+| Infrastructure | Traefik, Socket Proxy, CrowdSec, Authelia, Portainer, Task Scheduler |
 | Media | Plex (GPU), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2 |
 | Collection Mgmt | Kometa (runs daily at 1 AM) |
 | Books | Calibre-Web, Lazy Librarian |
@@ -53,6 +56,11 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 - `REBUILD.md` — **Bringing this stack up on a fresh host.** Host prerequisites, the Synology
   mounts and `resolved.conf` changes that are *not* in this repo, which local paths hold
   irreplaceable state, and what is still missing for an unattended rebuild.
+- `crowdsec-config/acquis.d/` — CrowdSec log/AppSec acquisition (`traefik.yaml`, `appsec.yaml`), mounted read-only
+- `traefik-rules/` — **all** Traefik file-provider config: `middleware-chains.yml`, `middlewares.yml`, `crowdsec.yml` (the `crowdsec@file` middleware), and the routers for services outside compose (`homebridge.yml`, `synology.yml`). Bind-mounted read-only at `/rules` (the file provider directory). **Not watched**: `deploy.sh` restarts traefik when anything in `traefik-rules/` is newer than its last start; by hand, `docker compose restart traefik`. The domain is written as `{{ env "DOMAINNAME" }}` (Go template; `DOMAINNAME` is passed to the traefik container)
+- `plugins-local/` — vendored Traefik CrowdSec bouncer plugin (pinned tag + bump procedure in its `README.md`)
+- `scripts/validate-waf.sh` — CrowdSec/AppSec validation script
+- `scripts/lib/validate-common.sh` — helpers shared by both validate scripts (colors, `.env` loading, counters, `print_result`); `.shellcheckrc` lets ShellCheck follow the `source`
 - `acme/acme.json` — Let's Encrypt certs (Traefik-managed, chmod 600)
 
 ## Environment Variables
@@ -64,6 +72,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
 | `LOCALDOCKERDIR` | Local storage path (`/home/jalance/Projects/docker-services`, on the 1TB TeamGroup SATA SSD that replaced the failed 870 EVO on 2026-10-17). See `REBUILD.md` §5 |
 | `SYNOLOGYDIR` | Synology NAS mount |
+| `CROWDSEC_BOUNCER_KEY` | Traefik-to-CrowdSec bouncer key (`openssl rand -hex 32`); passed to both CrowdSec (registers it as bouncer `traefik`) and Traefik as the compose secret `crowdsec_bouncer_key` |
 | `HOST_IP` | Host IP for DSM access through Traefik |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa) |
 | `TMDB_API_READ_ACCESS_TOKEN` | TMDb v4 read token (used by Kometa) |
@@ -73,7 +82,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 1. Add service to `docker-compose.yml` using an existing service (e.g. radarr) as a template
 2. Connect to `t2_proxy` network
 3. Add Traefik labels: `traefik.http.routers.<name>.rule=Host(\`<name>.$DOMAINNAME\`)`
-4. Use `chain-authelia@file` middleware
+4. Use `chain-authelia@file` middleware. `chain-authelia`, `chain-no-auth` and `chain-basic-auth` all start with `crowdsec@file`, so a new service gets the WAF automatically. Never attach a router without one of these chains — it would bypass CrowdSec.
 5. Add NFS volume if config persistence needed (follow existing pattern, Synology at 192.168.0.6)
 6. Add subdomain to `SERVICES` array in `scripts/validate-traefik.sh`
 7. Run `./scripts/validate-traefik.sh`
@@ -88,9 +97,15 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 
 Checks HTTPS access, HTTP→HTTPS redirect, security headers, TLS cert, and Traefik API for all services.
 
+Also run `./scripts/validate-waf.sh` after changes touching Traefik, CrowdSec or the chains (containers up, bouncer pulling, `/.env` probe blocked, normal page allowed).
+
 ## Logging
 
 All containers use `*default-logging` (json-file, 10MB max, 3 files). Application-level logs on NFS have built-in rotation — do not add external logrotate.
+
+Traefik's access log is the exception: it goes to a file (`$LOCALDOCKERDIR/traefik-logs/access.log`, full log, no status filter), not stdout, so it no longer
+appears in `docker logs traefik`. task-scheduler rotates it daily at 00:10 (`traefik-logrotate.sh`, copytruncate: `cp -p` to `access.log.<YYYYmmdd-HHMMSS>`, then truncate `access.log` in place; no signal, no Docker access, and `access.log` never disappears). This is safe because Traefik opens the file `O_APPEND` (`openAccessLogFile`, v3.6), verified by truncating the live file: it restarted at 411 bytes, no NUL bytes. CrowdSec re-opens the truncated file (`Re-opening truncated file`) and keeps reading. Retention is the current file + 2 rotated (newest 2 by name). A line written between the copy and the truncate is missing from the archive only; CrowdSec reads it as it is written.
+The full log is **sensitive**: it records query strings, so API keys passed as `?apikey=` (*arr, hydra) are stored in clear text, `root:root` 0644, in `$LOCALDOCKERDIR/traefik-logs` (dir mode 700, owned by `jalance`; containers run as root; the rotation job re-enforces 700 every run).
 
 ## Git Workflow
 
@@ -123,4 +138,36 @@ All containers use `*default-logging` (json-file, 10MB max, 3 files). Applicatio
   `gravity.db` (the blocklist, ~86k domains, refreshed by in-container cron Sundays 04:26) is what makes the standby
   usable — keep that one. v6 logs to the `/var/log/pihole/` **directory** and those logs are not
   persisted; the old single-file `pihole.log` bind mount was a v5 path and did nothing.
+- **CrowdSec** (WAF): Traefik plugin `crowdsec@file` (defined in `traefik-rules/crowdsec.yml`; see Traefik file rules below) does stream-mode bans (LAPI `crowdsec:8080`, refresh 60s) and AppSec (`crowdsec:7422`)
+  on each request. AppSec runs 4 runners (`routines: 4` in `acquis.d/appsec.yaml`; the default is 1, which serialises every request). Config + DB on local disk (see Storage); `acquis.d/` is tracked and mounted read-only.
+  - **Fails open on purpose** (Authelia is still the auth layer): `updateMaxFailure=-1` (the default `0` would block *all* traffic once the LAPI is unreachable in stream mode),
+    `streamStartupBlock=false` (Traefik does not wait for CrowdSec at start, so banned IPs pass for ~60s until the first sync), and AppSec unreachable / failure pass. **Unreadable bodies block** (plugin default, POST/PUT/PATCH/DELETE only; GET/HEAD go header-only and pass): HTTP/2/3 requests without Content-Length would otherwise reach AppSec header-only and skip body inspection. `crowdsecAppsecUnreadableBodyBlock=true` is the plugin default, pinned explicitly. `httpTimeoutSeconds` is the plugin default (10s): with fail-open a timed-out AppSec call passes the request uninspected, so a short timeout would let an attacker pad a body to exceed it; the cost is up to 10s of added latency if CrowdSec is slow (not down).
+    Verified: crowdsec stopped 100s, services kept answering, `/.env` was not blocked.
+  - **Whitelisting**: parser `crowdsecurity/whitelists` (127/8, 10/8, 172.16/12, 192.168/16, ::1) suppresses *bans* for LAN and docker nets. It does **not** exempt AppSec *blocking*:
+    a LAN `/.env` probe gets 403 and an alert, no ban. Tests from this host therefore see 403s.
+  - **Rules**: `appsec-default` (virtual patching + generic rules) blocks inline. OWASP CRS (`crowdsecurity/crs`) runs **out-of-band only**: alerts only, no inline blocks and no bans. Its ban scenario `crowdsecurity/crowdsec-appsec-outofband` is disabled (`DISABLE_SCENARIOS`) until tuned.
+    Re-enabling it, and later `crs-inband`, is a `REBUILD.md` §8 follow-up. Do not add either casually.
+  - **Authelia logs are NOT read by CrowdSec.** The only way without a log file was Docker API access, and the tecnativa socket-proxy cannot scope that below
+    "read every container's env and filesystem" (`CONTAINERS=1` exposes `/containers/*/json` and `/archive`, i.e. TLS keys and other containers' env). Brute force on Authelia is covered by
+    Authelia's own `regulation:` (max_retries 3, find_time 120, ban_time 300, in `/mnt/docker/authelia/configuration.yml`). Follow-up in `REBUILD.md` §8.
+  - **Disabled scenarios** (`DISABLE_SCENARIOS` in compose, space-separated): `crowdsecurity/crowdsec-appsec-outofband` (see Rules), and `crowdsecurity/http-crawl-non_statics`: with the full access log, one *arr/Organizr page load makes many non-static requests,
+    so it would ban our own WAN IP for 4h. Other `base-http-scenarios` stay on.
+  - **CAPI**: default registration is on. This pulls the community blocklist and shares your attacker IPs with CrowdSec. The console is not enrolled (optional manual `cscli console enroll`).
+  - **Versions**: image pinned to `v1.8.1`; the bouncer plugin is pinned and vendored (bump: `plugins-local/README.md`). Hub collections are **not** version-pinned and update with the image/hub.
+  - **Operate**: `docker compose exec crowdsec cscli decisions list` / `alerts list` / `metrics show appsec`. Unban: `docker compose exec crowdsec cscli decisions delete --ip <ip>`
+    (takes effect within ~60s, the stream refresh). Stale `traefik@<ip>` bouncers (one is added each time Traefik connects from a new IP): `cscli bouncers delete traefik` removes `traefik` **and every `traefik@<ip>`, including the live one**, so follow it with `docker compose restart crowdsec`, which re-registers `traefik` from the secret. Until then the key is unregistered (`cscli bouncers list` is empty), and a wrong or unregistered key blocks every chained router with 403 (the LAPI stream fails open, but AppSec answers an unknown key with 401, and the plugin blocks on any AppSec error other than 500/502/503/504/unreachable): an outage, so run the restart immediately.
+  - **Docker access**: none. CrowdSec is on `t2_proxy` only, not on `socket_proxy`, and has no socket mount.
+  - **Ping**: `/ping` is on an unpublished `ping` entrypoint (`:8082`); there is no `traefik` entrypoint / published `:8080` any more (`api.insecure` is off, the API is served by `traefik-rtr`); `http`, `https` and `dsm-admin` are set `asDefault=true` so `ping` does not become a default entrypoint for routers without explicit entryPoints. The healthcheck must repeat `--ping.entryPoint=ping --entryPoints.ping.address=:8082`
+    because `traefik healthcheck` does not read the daemon's flags.
+  - **Bouncer key rotation**: a wrong or unregistered key blocks every chained router with 403 (the LAPI stream fails open, but AppSec answers an unknown key with 401, and the plugin blocks on any AppSec error other than 500/502/503/504/unreachable), i.e. a key mismatch is an outage, not a silent fail-open; an *empty* key fails closed (`docker compose config` refuses to render without it via `x-require-crowdsec-bouncer-key`; `validate-waf.sh` also checks). Procedure: `REBUILD.md` §7.
+  - **Rollback**: revert the PR. The pre-WAF rules are kept, unused, on NFS at `/mnt/docker/traefik3/rules/` (chains without `crowdsec@file`), and a revert points Traefik back there. Keep that directory until the WAF has proven stable. Merge procedure: `REBUILD.md` §7.
+  - **Bypass**: file-provider router `dsm-photo-rtr` (`traefik-rules/synology.yml`, `home.<domain>/photo` to Synology :80) has no middlewares and no entryPoints, so it skips CrowdSec and Authelia on all default entrypoints (`http`, `https`, `dsm-admin`).
+    Pre-existing, not changed (`REBUILD.md` §8). Also outside the chains: `http-catchall` (redirect to HTTPS only, no backend) and the DSM TCP passthrough routers `grond-https-rtr`/`grond-admin-rtr` in the same file (TCP, so no HTTP middleware applies).
+  - **Traefik file rules**: all in `traefik-rules/`, mounted read-only at `/rules` as a **directory** (a single-file bind mount pins the inode and goes stale when git/an editor replaces the file). `--providers.file.watch=false` on purpose: the directory is this git checkout, where feature branches are developed, so a watch would put every `git switch` live (verified: a watched change applied within 3s), and a switch to a commit without `traefik-rules/` deletes the directory, leaving the bind mount pointing at a deleted inode. Unwatched, Traefik keeps what it loaded at start, and rule changes go live on merge: `deploy.sh` runs `docker compose restart traefik` when anything in `traefik-rules/` is newer than Traefik's last start (`up -d` alone would not recreate traefik), so rules from a failed deploy or a commit made without a restart are applied on the next deploy. Never switch this checkout to a commit without `traefik-rules/` (pre-merge `master`, old tags): it deletes the directory, and if Traefik starts meanwhile docker recreates it empty and root-owned, so Traefik comes up without the chains. The restart also re-binds the mount. Cost: ~2s connection refused per rules deploy.
+    They used to live on NFS at `/mnt/docker/traefik3/rules/`, untracked and not reloaded (no inotify); that directory is now only the rollback copy (see Rollback). The middleware lives in the file provider (not Docker labels) on purpose: the docker provider skips containers that are not `healthy`, `traefik` itself included (`keepContainer`, `pkg/provider/docker/config.go`, v3.6),
+    so a label-defined `crowdsec@docker` did not exist until the first healthcheck passed and every chained router 404ed (~2s even with `start_interval: 1s`, ~4.5s before). Label-defined config on `traefik` (`traefik-rtr`, `redirect-to-https`) is still subject to that gap.
+    Measured with `restart traefik` (probe every 0.25s x 120): labels, before `start_interval`: 16x404 + 7x000; labels + `start_interval: 1s`: 7x404 + 8x000; `crowdsec@file`: 0x404, 7x000 (~2s connection refused during the process restart) and no `does not exist` errors in the log.
+  - **Tainted collections**: `cscli collections list` shows `appsec-crs`, `base-http-scenarios` and `traefik` as `enabled,tainted`. Cause (`cscli collections inspect`, `tainted_by`): `DISABLE_SCENARIOS` removes
+    `crowdsec-appsec-outofband` and `http-crawl-non_statics`, which those collections contain, and `traefik` is tainted via `base-http-scenarios`. Consequence: tainted items are skipped by hub upgrades, so those three collections do not update until the scenarios are re-enabled.
+  - **Follow-ups / out of scope** (DSM TCP passthrough, CRS in-band, Authelia log acquisition, Cloudflare `trustedIPs`): see `REBUILD.md` §8.
 - **Home Assistant**: Privileged mode with host network (required for device access)

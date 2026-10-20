@@ -9,54 +9,15 @@
 
 set -uo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Load domain and host IP from .env if not provided as argument
-if [[ $# -ge 1 ]]; then
-    DOMAIN="$1"
-elif [[ -f "$PROJECT_DIR/.env" ]]; then
-    DOMAIN=$(grep -E "^DOMAINNAME=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
-else
-    echo -e "${RED}Error: No domain provided and .env file not found${NC}"
-    echo "Usage: $0 [domain]"
-    exit 1
-fi
+# shellcheck source=lib/validate-common.sh
+source "$SCRIPT_DIR/lib/validate-common.sh"
 
-if [[ -z "$DOMAIN" ]]; then
-    echo -e "${RED}Error: DOMAINNAME not set${NC}"
-    exit 1
-fi
-
-# Load HOST_IP for local resolution (bypasses public DNS, enables Authelia local bypass)
-if [[ -f "$PROJECT_DIR/.env" ]]; then
-    HOST_IP=$(grep -E "^HOST_IP=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
-fi
-
-if [[ -z "${HOST_IP:-}" ]]; then
-    echo -e "${YELLOW}Warning: HOST_IP not set, using public DNS (may trigger Authelia auth)${NC}"
-else
-    echo -e "${GREEN}Using local resolution: ${HOST_IP}${NC}"
-fi
-
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Traefik v3 Validation Script${NC}"
-echo -e "${BLUE}  Domain: ${DOMAIN}${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-
-# Counters
-PASSED=0
-FAILED=0
-WARNINGS=0
+load_env "$@"
+print_banner "Traefik v3 Validation Script"
 
 # Service definitions: "subdomain" or "subdomain:/path" for custom test paths
 SERVICES=(
@@ -80,26 +41,6 @@ SERVICES=(
     "home"               # DSM (Synology)
 )
 
-# Function to print test result
-print_result() {
-    local test_name="$1"
-    local status="$2"
-    local message="${3:-}"
-
-    if [[ "$status" == "PASS" ]]; then
-        echo -e "  ${GREEN}[PASS]${NC} $test_name"
-        ((PASSED++))
-    elif [[ "$status" == "FAIL" ]]; then
-        echo -e "  ${RED}[FAIL]${NC} $test_name"
-        [[ -n "$message" ]] && echo -e "         ${RED}$message${NC}"
-        ((FAILED++))
-    elif [[ "$status" == "WARN" ]]; then
-        echo -e "  ${YELLOW}[WARN]${NC} $test_name"
-        [[ -n "$message" ]] && echo -e "         ${YELLOW}$message${NC}"
-        ((WARNINGS++))
-    fi
-}
-
 # Function to test HTTP status code
 test_http_status() {
     local url="$1"
@@ -108,12 +49,7 @@ test_http_status() {
     local timeout="${4:-10}"
 
     local status
-    if [[ -n "${HOST_IP:-}" ]]; then
-        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$timeout" -k \
-            --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null) || status="000"
-    else
-        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$timeout" -k "$url" 2>/dev/null) || status="000"
-    fi
+    status=$(curl_status "$host" "${url#https://"$host"}" --max-time "$timeout")
 
     if [[ "$status" == "$expected" ]]; then
         return 0
@@ -131,11 +67,7 @@ check_header() {
     local timeout="${4:-10}"
 
     local headers
-    if [[ -n "${HOST_IP:-}" ]]; then
-        headers=$(curl -s -I --max-time "$timeout" -k --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null)
-    else
-        headers=$(curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null)
-    fi
+    headers=$(curl_resolved "$host" 443 "$url" -I --max-time "$timeout")
 
     if echo "$headers" | grep -qi "^$header:"; then
         return 0
@@ -151,11 +83,7 @@ get_header() {
     local host="$3"
     local timeout="${4:-10}"
 
-    if [[ -n "${HOST_IP:-}" ]]; then
-        curl -s -I --max-time "$timeout" -k --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
-    else
-        curl -s -I --max-time "$timeout" -k "$url" 2>/dev/null | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
-    fi
+    curl_resolved "$host" 443 "$url" -I --max-time "$timeout" | grep -i "^$header:" | cut -d':' -f2- | tr -d '\r' | xargs
 }
 
 echo -e "${BLUE}1. Testing Service Accessibility${NC}"
@@ -176,12 +104,7 @@ for service_def in "${SERVICES[@]}"; do
     host="${service}.${DOMAIN}"
 
     # Get HTTP status code (use local resolution if HOST_IP is set)
-    if [[ -n "${HOST_IP:-}" ]]; then
-        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k \
-            --resolve "${host}:443:${HOST_IP}" "$url" 2>/dev/null) || status="000"
-    else
-        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k "$url" 2>/dev/null) || status="000"
-    fi
+    status=$(curl_status "$host" "$path" --max-time 15)
 
     # 2xx, 3xx = success; 401 = service reachable (has own auth); 4xx/5xx = failure
     if [[ "$status" =~ ^[23] ]]; then
@@ -202,12 +125,7 @@ echo ""
 # Test HTTP redirect (should get 308 Permanent Redirect)
 http_url="http://${SERVICES[0]}.${DOMAIN}"
 redirect_host="${SERVICES[0]}.${DOMAIN}"
-if [[ -n "${HOST_IP:-}" ]]; then
-    redirect_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-        --resolve "${redirect_host}:80:${HOST_IP}" "$http_url" 2>/dev/null) || redirect_status="000"
-else
-    redirect_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$http_url" 2>/dev/null) || redirect_status="000"
-fi
+redirect_status=$(curl_resolved "$redirect_host" 80 "$http_url" -o /dev/null -w "%{http_code}" --max-time 10) || redirect_status="000"
 
 if [[ "$redirect_status" == "308" ]]; then
     print_result "HTTP->HTTPS redirect (308 Permanent)" "PASS"
@@ -311,11 +229,7 @@ fi
 api_url="https://traefik.${DOMAIN}/api/version"
 api_host="traefik.${DOMAIN}"
 if result=$(test_http_status "$api_url" "$api_host" "200" 10); then
-    if [[ -n "${HOST_IP:-}" ]]; then
-        version=$(curl -s -k --resolve "${api_host}:443:${HOST_IP}" "$api_url" 2>/dev/null | grep -o '"Version":"[^"]*"' | cut -d'"' -f4)
-    else
-        version=$(curl -s -k "$api_url" 2>/dev/null | grep -o '"Version":"[^"]*"' | cut -d'"' -f4)
-    fi
+    version=$(curl_resolved "$api_host" 443 "$api_url" | grep -o '"Version":"[^"]*"' | cut -d'"' -f4)
     if [[ -n "$version" ]]; then
         print_result "Traefik API responding" "PASS"
         echo -e "         Version: $version"
@@ -337,15 +251,7 @@ else
     fi
 fi
 
-echo ""
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Summary${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-echo -e "  ${GREEN}Passed:${NC}   $PASSED"
-echo -e "  ${RED}Failed:${NC}   $FAILED"
-echo -e "  ${YELLOW}Warnings:${NC} $WARNINGS"
-echo ""
+print_summary
 
 if [[ $FAILED -eq 0 ]]; then
     echo -e "${GREEN}All critical tests passed!${NC}"

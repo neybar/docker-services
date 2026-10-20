@@ -1,6 +1,6 @@
 # Home Server Docker Stack
 
-Self-hosted services running on Docker Compose behind Traefik with Authelia SSO/2FA and a Synology NAS for storage.
+Self-hosted services running on Docker Compose behind Traefik with a CrowdSec WAF, Authelia SSO/2FA and a Synology NAS for storage.
 
 ## References
 
@@ -16,6 +16,7 @@ Self-hosted services running on Docker Compose behind Traefik with Authelia SSO/
 | Infrastructure | Authelia | `authelia.$DOMAINNAME` |
 | Infrastructure | Portainer | `portainer.$DOMAINNAME` |
 | Infrastructure | Docker Socket Proxy | internal only |
+| Infrastructure | CrowdSec (WAF) | internal only |
 | Infrastructure | Task Scheduler | internal only |
 | Dashboard | Organizr | `start.$DOMAINNAME` |
 | Media | Plex | `plex.$DOMAINNAME` |
@@ -50,6 +51,7 @@ Key variables:
 - `LOCALDOCKERDIR` — local project directory path
 - `PLEX_TOKEN` — required for Kometa (get from Plex account settings)
 - `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
+- `CROWDSEC_BOUNCER_KEY` — Traefik/CrowdSec bouncer key (`openssl rand -hex 32`)
 
 ### 2. Docker Networks
 
@@ -90,6 +92,7 @@ docker compose up -d
 Task Scheduler handles routine maintenance automatically:
 - **Nightly at midnight**: Docker cleanup (prunes images/containers/volumes older than 7 days)
 - **Sundays at 3 AM**: Plex restart (picks up `VERSION=public` updates)
+- **Daily at 00:10**: Traefik access log rotation (current file + 2 rotated kept)
 - **Daily at 1 AM**: Kometa runs and updates Plex collections
 
 ## Development

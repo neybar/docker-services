@@ -15,6 +15,8 @@ A merge to `master` updates the running stack on orcrist. Nothing else deploys.
    - fetches `master` over HTTPS and fast-forwards (`--ff-only`) to exactly `$GITHUB_SHA`. If HEAD
      already contains that commit (a newer one is deployed), it exits without doing anything.
    - runs `docker compose config --quiet`, then `docker compose up -d --build --remove-orphans`
+   - restarts traefik if anything in `traefik-rules/` is newer than its last start (Traefik does not watch
+     that directory, and `up -d` does not recreate traefik when only the rules changed)
    - prints the old→new commits, the changed files and `docker compose ps`
 
    `up -d` only recreates containers whose configuration changed. It never pulls newer images;
@@ -26,6 +28,8 @@ A merge to `master` updates the running stack on orcrist. Nothing else deploys.
 The script runs from the deploy checkout, so each deploy executes the `deploy.sh` that was there
 *before* the fast-forward. A change to `deploy.sh` takes effect on the deploy after the one that
 ships it.
+
+Working on a feature branch in the deploy checkout pauses auto-deploys: `deploy.sh` exits unless the checkout is on `master`. Switch back to `master` before merging (for the CrowdSec PR, after merging: `REBUILD.md` §7).
 
 To run a deploy by hand: `./scripts/deploy.sh` (deploys the tip of `master`), or use
 **Actions > Deploy > Run workflow** on `master`.
@@ -100,6 +104,8 @@ The runner updates itself. To remove it: `sudo ./svc.sh stop && sudo ./svc.sh un
 A failed deploy leaves the checkout at the new commit and prints the commits it contained. It
 never resets automatically.
 
+**CrowdSec WAF:** merging its PR has a specific order (switch to `master` only after the merge), and rolling it back is a plain revert; see `REBUILD.md` §7.
+
 **Normal path:** revert on `master` through a PR. Merging it deploys the revert.
 ```bash
 git switch -c revert-<thing> origin/master
@@ -112,6 +118,7 @@ git push -u origin HEAD && gh pr create
 cd /home/jalance/Projects/docker-services
 git reset --hard <previous-good-sha>
 docker compose up -d --build --remove-orphans
+docker compose restart traefik   # if traefik-rules/ changed: Traefik does not watch it, and up -d does not reload it
 ```
 Then still revert on `master`. Otherwise the next deploy fast-forwards straight back to the bad
 commit. Because your local `master` is behind `origin/master`, that fast-forward will succeed.

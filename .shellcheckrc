@@ -1,0 +1,3 @@
+# Follow `source` directives (scripts/validate-*.sh source scripts/lib/validate-common.sh); also read by CI ShellCheck
+external-sources=true
+source-path=SCRIPTDIR

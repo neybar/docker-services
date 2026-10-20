@@ -1,0 +1,13 @@
+# AppSec (WAF) listener, queried by the Traefik bouncer plugin on crowdsec:7422
+# appsec-default: virtual patching + generic rules (in-band, blocking). crs: OWASP CRS, out-of-band (alerts only; its ban scenario crowdsec-appsec-outofband is disabled until tuned).
+# Do NOT add crowdsecurity/crs-inband without a tuning period.
+appsec_configs:
+  - crowdsecurity/appsec-default
+  - crowdsecurity/crs
+listen_addr: 0.0.0.0:7422
+# AppSec runners (default 1). Each handles one request at a time, so 1 serialises every request on the WAF path; 4 keeps a slow request from queueing the rest.
+routines: 4
+source: appsec
+name: appsec
+labels:
+  type: appsec
