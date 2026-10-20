@@ -172,7 +172,7 @@ services:
       - --global.checkNewVersion=true
       - --global.sendAnonymousUsage=true
       - --entryPoints.http.address=:80
-      - --entryPoints.http.asDefault=true # ping/traefik are not default; routers without entryPoints use http, https, dsm-admin
+      - --entryPoints.http.asDefault=true # ping is not default; routers without entryPoints use http, https, dsm-admin
       - --entryPoints.https.address=:443
       - --entryPoints.https.asDefault=true
       - --entryPoints.https.http3=true
