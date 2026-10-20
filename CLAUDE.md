@@ -155,7 +155,7 @@ The full log is **sensitive**: it records query strings, so API keys passed as `
   - **CAPI**: default registration is on. This pulls the community blocklist and shares your attacker IPs with CrowdSec. The console is not enrolled (optional manual `cscli console enroll`).
   - **Versions**: image pinned to `v1.8.1`; the bouncer plugin is pinned and vendored (bump: `plugins-local/README.md`). Hub collections are **not** version-pinned and update with the image/hub.
   - **Operate**: `docker compose exec crowdsec cscli decisions list` / `alerts list` / `metrics show appsec`. Unban: `docker compose exec crowdsec cscli decisions delete --ip <ip>`
-    (takes effect within ~60s, the stream refresh).
+    (takes effect within ~60s, the stream refresh). Stale `traefik@<ip>` bouncers (one is added each time Traefik connects from a new IP): `cscli bouncers delete traefik` removes `traefik` **and every `traefik@<ip>`, including the live one**, so follow it with `docker compose restart crowdsec`, which re-registers `traefik` from the secret. Until then the key is unregistered (`cscli bouncers list` is empty), so ban decisions stop syncing to Traefik.
   - **Docker access**: none. CrowdSec is on `t2_proxy` only, not on `socket_proxy`, and has no socket mount.
   - **Ping**: `/ping` is on an unpublished `ping` entrypoint (`:8082`); there is no `traefik` entrypoint / published `:8080` any more (`api.insecure` is off, the API is served by `traefik-rtr`); `http`, `https` and `dsm-admin` are set `asDefault=true` so `ping` does not become a default entrypoint for routers without explicit entryPoints. The healthcheck must repeat `--ping.entryPoint=ping --entryPoints.ping.address=:8082`
     because `traefik healthcheck` does not read the daemon's flags.
