@@ -142,10 +142,14 @@ volumes:
 # Compose-level guard: an empty bouncer key fails closed (plugin rejects it, crowdsec@file is never built, every chained router breaks),
 # so refuse to render the config at all. Extension field, unused otherwise.
 x-require-crowdsec-bouncer-key: ${CROWDSEC_BOUNCER_KEY:?set CROWDSEC_BOUNCER_KEY in .env (openssl rand -hex 32); an empty key fails closed}
+# Same guard for the DNS-challenge token: an empty one only surfaces as a failed cert renewal, weeks later.
+x-require-cloudflare-dns-api-token: ${CLOUDFLARE_DNS_API_TOKEN:?set CLOUDFLARE_DNS_API_TOKEN in .env (Cloudflare "Edit zone DNS" token for DOMAINNAME)}
 
 secrets:
   crowdsec_bouncer_key:
     environment: CROWDSEC_BOUNCER_KEY
+  cloudflare_dns_api_token:
+    environment: CLOUDFLARE_DNS_API_TOKEN
 
 ########################### SERVICES
 services:
@@ -242,12 +246,13 @@ services:
       # so an editor/git/cp that replaces the file leaves Traefik on the old one.
       - $LOCALDOCKERDIR/traefik-rules:/rules:ro
     environment:
-      - CF_API_EMAIL=$CLOUDFLARE_EMAIL
-      - CF_API_KEY=$CLOUDFLARE_API_KEY
+      # Scoped "Edit zone DNS" token for the ACME DNS challenge (not the account-wide Global API Key); lego reads *_FILE
+      - CF_DNS_API_TOKEN_FILE=/run/secrets/cloudflare_dns_api_token
       - DOMAINNAME=$DOMAINNAME # used by {{ env "DOMAINNAME" }} templates in ./traefik-rules
-    # Bouncer key as a file, not a label: labels are visible in `docker inspect` and the dashboard
+    # Secrets as files, not labels/env: those are visible in `docker inspect` and the dashboard
     secrets:
       - crowdsec_bouncer_key
+      - cloudflare_dns_api_token
     healthcheck:
       # healthcheck does not see the daemon's flags, so repeat the ping entrypoint here (keep in sync with the command above)
       test: ["CMD", "traefik", "healthcheck", "--ping", "--ping.entryPoint=ping", "--entryPoints.ping.address=:8082"]

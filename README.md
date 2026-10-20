@@ -46,7 +46,7 @@ cp env.example .env
 
 Key variables:
 - `DOMAINNAME` — your domain (all services run as subdomains)
-- `CLOUDFLARE_EMAIL`, `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONEID` — for Let's Encrypt DNS challenge
+- `CLOUDFLARE_EMAIL` (Let's Encrypt account email), `CLOUDFLARE_DNS_API_TOKEN` (scoped "Edit zone DNS" token), `CLOUDFLARE_ZONEID` — for Let's Encrypt DNS challenge
 - `DOCKERDIR` — NFS mount path (e.g. `/mnt/docker`)
 - `LOCALDOCKERDIR` — local project directory path
 - `PLEX_TOKEN` — required for Kometa (get from Plex account settings)

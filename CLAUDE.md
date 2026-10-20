@@ -68,7 +68,9 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | Variable | Purpose |
 |----------|---------|
 | `DOMAINNAME` | Primary domain for all subdomains |
-| `CLOUDFLARE_EMAIL`, `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONEID` | DNS challenge |
+| `CLOUDFLARE_EMAIL` | Let's Encrypt account email (ACME registration) |
+| `CLOUDFLARE_DNS_API_TOKEN` | DNS challenge: Cloudflare API token from the "Edit zone DNS" template, scoped to `DOMAINNAME`'s zone only. Passed to Traefik as the compose secret `cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`). Never the Global API Key, which has full account access |
+| `CLOUDFLARE_ZONEID` | Zone ID (not referenced by compose) |
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
 | `LOCALDOCKERDIR` | Local storage path (`/home/jalance/Projects/docker-services`, on the 1TB TeamGroup SATA SSD that replaced the failed 870 EVO on 2026-10-17). See `REBUILD.md` §5 |
 | `SYNOLOGYDIR` | Synology NAS mount |
