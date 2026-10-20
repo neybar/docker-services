@@ -1,0 +1,44 @@
+# Traefik v3 middlewares (file provider). Combined into chains in middleware-chains.yml.
+# {{ env "DOMAINNAME" }} is a Go template rendered by the file provider; DOMAINNAME is passed to the traefik container.
+http:
+  middlewares:
+    middlewares-rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+
+    # Not used by any router (chain-basic-auth is unused) and /shared is not mounted, so the file does not exist.
+    middlewares-basic-auth:
+      basicAuth:
+        realm: "Traefik3 Basic Auth"
+        usersFile: "/shared/.htpasswd" # be sure to mount the volume through docker-compose.yml
+
+    middlewares-authelia:
+      forwardAuth:
+        address: 'http://authelia:9091/api/verify?rd=https://authelia.{{ env "DOMAINNAME" }}'
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "Remote-User"
+          - "Remote-Groups"
+
+    middlewares-secure-headers:
+      headers:
+        accessControlAllowMethods:
+          - "GET"
+          - "OPTIONS"
+          - "PUT"
+        accessControlMaxAge: 100
+        hostsProxyHeaders:
+          - "X-Forwarded-Host"
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        customFrameOptionsValue: "allow-from https:example.com" # CSP takes care of this but may be needed for organizr
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "same-origin"
+        permissionsPolicy: "camera=(), geolocation=(), microphone=(), payment=(), usb=(), vr=()"
+        customResponseHeaders:
+          X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex,"
+          server: ""

@@ -1,0 +1,43 @@
+# Synology DSM (home.<domain>). Outside the chains, so not covered by CrowdSec or Authelia (REBUILD.md §8):
+# dsm-photo-rtr has no middlewares and no entryPoints (all default entrypoints), and the TCP routers pass TLS
+# through to DSM, so no HTTP middleware can apply.
+http:
+  routers:
+    dsm-photo-rtr:
+      rule: 'Host(`home.{{ env "DOMAINNAME" }}`) && Path(`/photo`)'
+      service: "grond-photo-svc"
+
+  services:
+    grond-photo-svc:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.0.6:80/"
+
+tcp:
+  routers:
+    grond-https-rtr:
+      entryPoints:
+        - "https"
+      rule: 'HostSNI(`home.{{ env "DOMAINNAME" }}`)'
+      service: "grond-https-svc"
+      tls:
+        passthrough: true
+
+    grond-admin-rtr:
+      entryPoints:
+        - "dsm-admin"
+      rule: 'HostSNI(`home.{{ env "DOMAINNAME" }}`)'
+      service: "grond-admin-svc"
+      tls:
+        passthrough: true
+
+  services:
+    grond-https-svc:
+      loadBalancer:
+        servers:
+          - address: "192.168.0.6:443"
+
+    grond-admin-svc:
+      loadBalancer:
+        servers:
+          - address: "192.168.0.6:5001"

@@ -61,11 +61,6 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/sabnzb
-  traefik_config:
-    driver_opts:
-      type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
-      device: :/volume1/docker/traefik3
   traefik_acme_config:
     driver_opts:
       type: nfs
@@ -200,8 +195,9 @@ services:
       - --providers.docker.defaultrule=Host(`{{ index .Labels "com.docker.compose.service" }}.$DOMAINNAME`)
       - --providers.docker.exposedByDefault=false
       - --providers.docker.network=t2_proxy
-      - --providers.file.directory=/config/rules # Load dynamic configuration from YAML files in a directory
-      - --providers.file.watch=true # Only works on top level files in the rules folder
+      # Dynamic config (chains, middlewares, crowdsec, file-provider routers) is tracked in ./traefik-rules, on local disk.
+      - --providers.file.directory=/rules
+      - --providers.file.watch=true # Reloads on change (top-level files only; local disk, so inotify works)
       # - --certificatesResolvers.dns-cloudflare.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory # LetsEncrypt Staging Server - uncomment when testing
       - --certificatesResolvers.dns-cloudflare.acme.email=$CLOUDFLARE_EMAIL
       - --certificatesResolvers.dns-cloudflare.acme.storage=/config/acme/acme.json
@@ -236,18 +232,17 @@ services:
         protocol: tcp
         mode: host
     volumes:
-      - traefik_config:/config
       # - traefik_acme_config:/config/acme:ro
       - $LOCALDOCKERDIR/acme:/config/acme
       - $LOCALDOCKERDIR/plugins-local:/plugins-local:ro
       - $LOCALDOCKERDIR/traefik-logs:/logs
-      # Tracked rules (crowdsec@file), nested inside the NFS /config volume like hydra's DB mount; see traefik-rules/crowdsec.yml.
-      # A directory, not the file: a single-file bind mount pins the inode, so an editor/git/cp that replaces the file leaves Traefik on the old one.
-      # The file provider loads subdirectories of /config/rules (but does not watch them: restart traefik after a change).
-      - $LOCALDOCKERDIR/traefik-rules:/config/rules/repo:ro
+      # All file-provider rules, tracked in git. A directory, not single files: a single-file bind mount pins the inode,
+      # so an editor/git/cp that replaces the file leaves Traefik on the old one.
+      - $LOCALDOCKERDIR/traefik-rules:/rules:ro
     environment:
       - CF_API_EMAIL=$CLOUDFLARE_EMAIL
       - CF_API_KEY=$CLOUDFLARE_API_KEY
+      - DOMAINNAME=$DOMAINNAME # used by {{ env "DOMAINNAME" }} templates in ./traefik-rules
     # Bouncer key as a file, not a label: labels are visible in `docker inspect` and the dashboard
     secrets:
       - crowdsec_bouncer_key
