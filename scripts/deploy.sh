@@ -7,7 +7,8 @@
 #   DEPLOY_DIR  checkout to deploy into (default /home/jalance/Projects/docker-services)
 #   GITHUB_SHA  commit to deploy (set by Actions); defaults to the tip of master
 #
-# Fast-forwards the checkout and runs `docker compose up -d --build --remove-orphans`.
+# Fast-forwards the checkout and runs `docker compose up -d --build --remove-orphans`, then restarts traefik
+# if traefik-rules/ changed (Traefik does not watch it).
 # Never pulls images (upgrades are a deliberate, separate step) and never resets on failure.
 # See docs/DEPLOY.md.
 
@@ -82,6 +83,13 @@ docker compose config --quiet
 
 echo "==> docker compose up -d --build --remove-orphans"
 docker compose up -d --build --remove-orphans
+
+# Traefik does not watch ./traefik-rules (see the traefik service in docker-compose.yml), and `up -d` does not recreate it
+# when only the rules changed, so restart it to load them.
+if [[ "$old" != "$new" ]] && ! git diff --quiet "$old" "$new" -- traefik-rules; then
+    echo "==> traefik-rules/ changed: docker compose restart traefik"
+    docker compose restart traefik
+fi
 
 echo "==> docker compose ps"
 docker compose ps

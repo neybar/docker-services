@@ -1,6 +1,6 @@
 # CrowdSec bouncer/AppSec middleware (Traefik plugin, vendored in ./plugins-local), referenced by the chains in
-# middleware-chains.yml as crowdsec@file. traefik-rules/ is the file provider directory (/rules, read-only, local disk,
-# watched: edits are picked up without a restart).
+# middleware-chains.yml as crowdsec@file. traefik-rules/ is the file provider directory (/rules, read-only, not watched:
+# deploy.sh restarts traefik when a deploy changes it; by hand, `docker compose restart traefik`).
 # It used to be defined by labels on the traefik service (crowdsec@docker); the docker provider skips Traefik
 # itself until its healthcheck passes, so the chains 404ed for a few seconds at every start.
 #

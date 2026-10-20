@@ -197,7 +197,9 @@ services:
       - --providers.docker.network=t2_proxy
       # Dynamic config (chains, middlewares, crowdsec, file-provider routers) is tracked in ./traefik-rules, on local disk.
       - --providers.file.directory=/rules
-      - --providers.file.watch=true # Reloads on change (top-level files only; local disk, so inotify works)
+      # Not watched on purpose: ./traefik-rules is this git checkout, so a watch would apply every branch switch to production
+      # (and a switch to a commit without the directory leaves the bind mount stale). deploy.sh restarts traefik when a deploy changes it.
+      - --providers.file.watch=false
       # - --certificatesResolvers.dns-cloudflare.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory # LetsEncrypt Staging Server - uncomment when testing
       - --certificatesResolvers.dns-cloudflare.acme.email=$CLOUDFLARE_EMAIL
       - --certificatesResolvers.dns-cloudflare.acme.storage=/config/acme/acme.json

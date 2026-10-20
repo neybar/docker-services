@@ -187,12 +187,13 @@ docker compose up -d
    Rotation (`traefik-logrotate.sh`, 00:10) is copytruncate: copy to `access.log.<timestamp>`, truncate in place. Traefik opens the file `O_APPEND` and CrowdSec re-opens a truncated file, so nothing is missed; only the archive can lose a line written between the copy and the truncate. Keeps the current file + 2 rotated.
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
 3. Nothing to create for Traefik's dynamic config: the chains (each starting with `crowdsec@file`), the `middlewares-*`, `crowdsec@file`
-   and the Synology/Homebridge routers are all in `traefik-rules/`, mounted read-only at `/rules` and watched (edits apply without a restart).
+   and the Synology/Homebridge routers are all in `traefik-rules/`, mounted read-only at `/rules`. Not watched (it is the git checkout): `deploy.sh`
+   restarts traefik when a deploy changes `traefik-rules/`; after a hand edit, `docker compose restart traefik`.
    Traefik no longer uses the NFS `/mnt/docker/traefik3` volume.
 4. A Traefik restart costs ~2s of connection refused, with no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
 
-Rollback if the WAF misbehaves: revert the PR. The deploy (`up -d --remove-orphans`) points Traefik back at the NFS rules in `/mnt/docker/traefik3/rules/`,
+Rollback if the WAF misbehaves: revert the PR. The deploy (`up -d --build --remove-orphans`) points Traefik back at the NFS rules in `/mnt/docker/traefik3/rules/`,
 which are kept as the pre-WAF copy (chains without `crowdsec@file`), and removes crowdsec. Keep that NFS directory until the WAF has proven stable; once it is deleted, a revert has no rules to fall back on.
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
@@ -204,8 +205,11 @@ Docker access: none. CrowdSec does not read Authelia logs: the only way without 
 in `/mnt/docker/authelia/configuration.yml`). Scenario `crowdsecurity/http-crawl-non_statics` is disabled (`DISABLE_SCENARIOS`): it would ban our own WAN IP.
 CRS out-of-band is alerts only: its ban scenario `crowdsecurity/crowdsec-appsec-outofband` is also disabled there until tuned.
 
-**Merging the CrowdSec PR.** The live stack already runs the branch. Running `docker compose up` from `master` before the merge would put Traefik back on the
-pre-WAF NFS rules (no outage, but no WAF). Procedure: merge the PR, `git switch master` in the deploy checkout, `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
+**Merging the CrowdSec PR.** The live stack already runs the branch. Do not `git switch master` before local `master` contains the merge: the old `master` has no
+`traefik-rules/`, so the switch deletes the directory under the running Traefik (it keeps its loaded config, but the next restart would come up without the chains
+until the directory is back). Running `docker compose up` from the old `master` puts Traefik back on the pre-WAF NFS rules (no outage, but no WAF).
+Procedure: merge the PR, then in the deploy checkout `git fetch origin master:master && git switch master` (moves local `master` to the merge without touching
+the working tree, so `traefik-rules/` is unchanged), then `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
 The merge-triggered deploy refuses while the checkout is on the feature branch; that is expected. See `docs/DEPLOY.md`.
 Chains cover every HTTP router except the file-provider `dsm-photo-rtr` and `http-catchall` (redirect to HTTPS only, no backend). The DSM TCP passthrough routers `grond-https-rtr`/`grond-admin-rtr` are TCP, so no HTTP middleware applies (see §8).
 The Traefik access log holds API keys from query strings (`$LOCALDOCKERDIR/traefik-logs`, `root:root` 0644).
