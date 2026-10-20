@@ -1,0 +1,31 @@
+# CrowdSec bouncer/AppSec middleware (Traefik plugin, vendored in ./plugins-local).
+# Mounted read-only into the file provider directory (/config/rules/crowdsec.yml) so it is defined in the same
+# provider as the chains in rules/middleware-chains.yml and is referenced there as crowdsec@file.
+# It used to be defined by labels on the traefik service (crowdsec@docker); the docker provider skips Traefik
+# itself until its healthcheck passes, so the chains 404ed for a few seconds at every start.
+#
+# Stream mode: banned IPs are cached locally and refreshed from the LAPI every 60s.
+# FAIL OPEN: if CrowdSec is down, traffic passes (updateMaxFailure=-1, AppSec failure/unreachable Block=false);
+# Authelia remains the auth layer. Unreadable bodies are blocked, not passed.
+# The bouncer key is read from the compose secret file, not set here.
+http:
+  middlewares:
+    crowdsec:
+      plugin:
+        crowdsec-bouncer:
+          enabled: true
+          crowdsecMode: stream
+          crowdsecLapiHost: crowdsec:8080
+          crowdsecLapiKeyFile: /run/secrets/crowdsec_bouncer_key
+          updateMaxFailure: -1
+          streamStartupBlock: false
+          # AppSec (WAF) on crowdsec:7422. Fail open on error paths except unreadable bodies (blocked); the AppSec key defaults to the LAPI key.
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: crowdsec:7422
+          crowdsecAppsecFailureBlock: false
+          crowdsecAppsecUnreachableBlock: false
+          # Bodies the plugin cannot read (HTTP/2/3 without Content-Length) would otherwise reach AppSec header-only,
+          # bypassing body inspection, so they are blocked.
+          crowdsecAppsecUnreadableBodyBlock: true
+          # Bounds the latency added when CrowdSec is slow (LAPI stream and AppSec).
+          httpTimeoutSeconds: 2

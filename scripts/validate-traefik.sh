@@ -9,54 +9,15 @@
 
 set -uo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Load domain and host IP from .env if not provided as argument
-if [[ $# -ge 1 ]]; then
-    DOMAIN="$1"
-elif [[ -f "$PROJECT_DIR/.env" ]]; then
-    DOMAIN=$(grep -E "^DOMAINNAME=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
-else
-    echo -e "${RED}Error: No domain provided and .env file not found${NC}"
-    echo "Usage: $0 [domain]"
-    exit 1
-fi
+# shellcheck source=lib/validate-common.sh
+source "$SCRIPT_DIR/lib/validate-common.sh"
 
-if [[ -z "$DOMAIN" ]]; then
-    echo -e "${RED}Error: DOMAINNAME not set${NC}"
-    exit 1
-fi
-
-# Load HOST_IP for local resolution (bypasses public DNS, enables Authelia local bypass)
-if [[ -f "$PROJECT_DIR/.env" ]]; then
-    HOST_IP=$(grep -E "^HOST_IP=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
-fi
-
-if [[ -z "${HOST_IP:-}" ]]; then
-    echo -e "${YELLOW}Warning: HOST_IP not set, using public DNS (may trigger Authelia auth)${NC}"
-else
-    echo -e "${GREEN}Using local resolution: ${HOST_IP}${NC}"
-fi
-
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Traefik v3 Validation Script${NC}"
-echo -e "${BLUE}  Domain: ${DOMAIN}${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-
-# Counters
-PASSED=0
-FAILED=0
-WARNINGS=0
+load_env "$@"
+print_banner "Traefik v3 Validation Script"
 
 # Service definitions: "subdomain" or "subdomain:/path" for custom test paths
 SERVICES=(
@@ -79,26 +40,6 @@ SERVICES=(
     "homebridge"
     "home"               # DSM (Synology)
 )
-
-# Function to print test result
-print_result() {
-    local test_name="$1"
-    local status="$2"
-    local message="${3:-}"
-
-    if [[ "$status" == "PASS" ]]; then
-        echo -e "  ${GREEN}[PASS]${NC} $test_name"
-        ((PASSED++))
-    elif [[ "$status" == "FAIL" ]]; then
-        echo -e "  ${RED}[FAIL]${NC} $test_name"
-        [[ -n "$message" ]] && echo -e "         ${RED}$message${NC}"
-        ((FAILED++))
-    elif [[ "$status" == "WARN" ]]; then
-        echo -e "  ${YELLOW}[WARN]${NC} $test_name"
-        [[ -n "$message" ]] && echo -e "         ${YELLOW}$message${NC}"
-        ((WARNINGS++))
-    fi
-}
 
 # Function to test HTTP status code
 test_http_status() {
@@ -337,15 +278,7 @@ else
     fi
 fi
 
-echo ""
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Summary${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-echo -e "  ${GREEN}Passed:${NC}   $PASSED"
-echo -e "  ${RED}Failed:${NC}   $FAILED"
-echo -e "  ${YELLOW}Warnings:${NC} $WARNINGS"
-echo ""
+print_summary
 
 if [[ $FAILED -eq 0 ]]; then
     echo -e "${GREEN}All critical tests passed!${NC}"

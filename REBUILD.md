@@ -182,13 +182,13 @@ docker compose up -d
 ### CrowdSec (WAF)
 
 1. Generate the bouncer key and put it in `.env`: `openssl rand -hex 32` -> `CROWDSEC_BOUNCER_KEY=`.
-   **An empty key fails closed**: the plugin rejects it, `crowdsec@docker` is never built, and every chained router breaks. `docker compose config` (so also `deploy.sh`, before `up`) refuses to render without it, and `validate-waf.sh` fails on it.
+   **An empty key fails closed**: the plugin rejects it, `crowdsec@file` is never built, and every chained router breaks. `docker compose config` (so also `deploy.sh`, before `up`) refuses to render without it, and `validate-waf.sh` fails on it.
    Both containers read it as the compose secret `crowdsec_bouncer_key`; crowdsec registers it as bouncer `traefik` at start (`/run/secrets/bouncer_key_traefik`), so no `cscli bouncers add` is needed.
 2. `$LOCALDOCKERDIR/crowdsec/{config,data}` and `$LOCALDOCKERDIR/traefik-logs` are created on first start if missing (as `root`); pre-creating them as your user also works. Nothing to restore (see §5).
    Create `$LOCALDOCKERDIR/traefik-logs` yourself first with mode 700 (`install -d -m 700 $LOCALDOCKERDIR/traefik-logs`); containers run as root, so CrowdSec and Traefik are unaffected.
-   Rotation (`traefik-logrotate.sh`, 00:10) keeps the current file + 2 rotated. Lines written between the rename and Traefik's USR1 reopen land in the rotated file and are not parsed (accepted gap).
+   Rotation (`traefik-logrotate.sh`, 00:10) is copytruncate: copy to `access.log.<timestamp>`, truncate in place. Traefik opens the file `O_APPEND` and CrowdSec re-opens a truncated file, so nothing is missed; only the archive can lose a line written between the copy and the truncate. Keeps the current file + 2 rotated.
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
-3. Create `/mnt/docker/traefik3/rules/middleware-chains.yml` with exactly this content. It is **not in git**; `crowdsec@docker` is defined by labels on the `traefik` service:
+3. Create `/mnt/docker/traefik3/rules/middleware-chains.yml` with exactly this content. It is **not in git**; `crowdsec@file` is defined by the tracked `traefik-rules/crowdsec.yml`, which compose bind-mounts read-only at `/config/rules/crowdsec.yml` (nested inside the NFS `traefik_config` volume, so an empty placeholder `crowdsec.yml` appears in `/mnt/docker/traefik3/rules/`; harmless):
 
    ```yaml
    http:
@@ -196,14 +196,14 @@ docker compose up -d
        chain-no-auth:
          chain:
            middlewares:
-             - "crowdsec@docker"
+             - "crowdsec@file"
              - "middlewares-rate-limit"
              - "middlewares-secure-headers"
 
        chain-basic-auth:
          chain:
            middlewares:
-             - "crowdsec@docker"
+             - "crowdsec@file"
              - "middlewares-rate-limit"
              - "middlewares-secure-headers"
              - "middlewares-basic-auth"
@@ -211,19 +211,18 @@ docker compose up -d
        chain-authelia:
          chain:
            middlewares:
-             - "crowdsec@docker"
+             - "crowdsec@file"
              - "middlewares-rate-limit"
              - "middlewares-secure-headers"
              - "middlewares-authelia"
    ```
 
    The `middlewares-*` definitions live in `middlewares.yml` in the same `rules/` directory (also not in git; not reproduced here).
-4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS. A burst of
-   `middleware "crowdsec@docker" does not exist` errors at each start is expected, not harmless: Traefik's docker provider skips containers that are not `healthy`, `traefik` itself included, so the chained routers 404 until its first healthcheck passes (`start_interval: 1s`). Measured ~2s refused + ~2s of 404 per restart.
+4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS. Measured per restart: ~2s connection refused, no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
 
-Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowdsec@docker` lines from the three chains and `docker compose restart traefik`,
-*then* revert the PR. Reverting first auto-deploys and removes the middleware while the NFS chains still reference it, so every chained router breaks.
+Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowdsec@file` lines from the three chains and `docker compose restart traefik`,
+*then* revert the PR. Reverting first auto-deploys and removes the mount (so `crowdsec@file`) while the NFS chains still reference it, so every chained router breaks.
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
 `docker compose exec crowdsec cscli bouncers delete traefik`, and delete every `traefik@<ip>` entry too (CrowdSec creates these when the same key connects from a new IP; `cscli bouncers list` shows them), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d crowdsec traefik`,
@@ -234,8 +233,8 @@ Docker access: none. CrowdSec does not read Authelia logs: the only way without 
 in `/mnt/docker/authelia/configuration.yml`). Scenario `crowdsecurity/http-crawl-non_statics` is disabled (`DISABLE_SCENARIOS`): it would ban our own WAN IP.
 CRS out-of-band is alerts only: its ban scenario `crowdsecurity/crowdsec-appsec-outofband` is also disabled there until tuned.
 
-**Merging the CrowdSec PR.** The live stack already runs the branch and the NFS chains already reference `crowdsec@docker`, so do **not** run `docker compose up` from `master`
-before the PR is merged (it would remove the middleware). Procedure: merge the PR, `git switch master` in the deploy checkout, `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
+**Merging the CrowdSec PR.** The live stack already runs the branch and the NFS chains already reference `crowdsec@file`, so do **not** run `docker compose up` from `master`
+before the PR is merged (it would remove the mount and the middleware). Procedure: merge the PR, `git switch master` in the deploy checkout, `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
 The merge-triggered deploy refuses while the checkout is on the feature branch; that is expected. See `docs/DEPLOY.md`.
 Chains cover every router except the file-provider `dsm-photo-rtr` (see §8).
 The Traefik access log holds API keys from query strings (`$LOCALDOCKERDIR/traefik-logs`, `root:root` 0644).
@@ -271,7 +270,7 @@ Known gaps, for later work:
 - [ ] CrowdSec CRS after a tuning period: re-enable the `crowdsecurity/crowdsec-appsec-outofband` ban scenario (remove it from `DISABLE_SCENARIOS`), then consider in-band blocking (`crs-inband`); today CRS is out-of-band, alerts only
 - [ ] Authelia upgrade (running 4.21.0). Afterwards set `log_file_path` to a local-disk file and add a CrowdSec file acquisition for it
       (needs a rotation design, like `traefik-logrotate.sh`); until then Authelia is protected by its own `regulation:` only
-- [ ] Move `/mnt/docker/traefik3/rules` into the repo (the chain file is only documented in §7)
+- [ ] Move the rest of `/mnt/docker/traefik3/rules` into the repo (`crowdsec.yml` is tracked in `traefik-rules/`; the chains and `middlewares-*` are only documented in §7)
 - [ ] Vestigial Cloudflare `trustedIPs` on the https entrypoint: DNS is not Cloudflare-proxied (resolves directly to the WAN IP), so any
       Cloudflare-origin request can spoof `X-Forwarded-For`. Flagged, not changed
 - [ ] WAN-source ban test: only LAN/hairpinned sources could be tested, and the parser whitelist was not exercised by a non-whitelisted source

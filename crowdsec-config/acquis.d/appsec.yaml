@@ -5,6 +5,8 @@ appsec_configs:
   - crowdsecurity/appsec-default
   - crowdsecurity/crs
 listen_addr: 0.0.0.0:7422
+# AppSec runners (default 1). Each handles one request at a time, so 1 serialises every request on the WAF path; 4 keeps a slow request from queueing the rest.
+routines: 4
 source: appsec
 name: appsec
 labels:
