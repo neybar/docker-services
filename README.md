@@ -53,6 +53,32 @@ Key variables:
 - `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
 - `CROWDSEC_BOUNCER_KEY` — Traefik/CrowdSec bouncer key (`openssl rand -hex 32`)
 
+#### Cloudflare DNS token (`CLOUDFLARE_DNS_API_TOKEN`)
+
+Traefik uses this token to create the temporary `_acme-challenge` TXT record that proves domain ownership to
+Let's Encrypt (wildcard cert, renewed ~30 days before expiry). It needs DNS edit on one zone and nothing else.
+Do **not** use the Global API Key: it has full control of the whole Cloudflare account.
+
+To create (or replace a lost) token:
+1. Cloudflare dashboard → **My Profile → API Tokens → Create Token** → template **Edit zone DNS** → Use template.
+2. **Permissions:** leave as `Zone / DNS / Edit`.
+3. **Zone Resources:** `Include` → `Specific zone` → your `DOMAINNAME` zone.
+4. Leave Client IP filtering and TTL empty (an expiring token silently breaks renewal months later) → Continue → Create Token.
+5. Copy the value into `.env` as `CLOUDFLARE_DNS_API_TOKEN=`. Cloudflare shows it only once; if lost, roll or recreate it.
+6. When replacing a token, delete the old one under My Profile → API Tokens.
+
+Verify before starting Traefik (expect `"status":"active"` and only your zone listed):
+```bash
+# Read only this variable: sourcing .env breaks in zsh (it sets names zsh treats as special, e.g. GID)
+T=$(grep '^CLOUDFLARE_DNS_API_TOKEN=' .env | cut -d= -f2-)
+curl -s -H "Authorization: Bearer $T" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -c '{success, status: .result.status}'
+curl -s -H "Authorization: Bearer $T" https://api.cloudflare.com/client/v4/zones | jq -c '[.result[].name]'
+```
+
+Compose refuses to start if the variable is empty. The token reaches Traefik as the compose secret
+`cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`), not as an env var. A bad token does not show up at startup,
+only as a failed renewal in `docker compose logs traefik`.
+
 ### 2. Docker Networks
 
 ```bash
