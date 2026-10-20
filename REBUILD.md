@@ -18,7 +18,7 @@ Start here, because these are the things a fresh host will not have and
 | 10 CIFS mounts (`/mnt/*`) | `/etc/fstab` | **not captured** — template below |
 | CIFS credentials | `/etc/cifspwd` (root, `0600`) | **secret, never commit** |
 | `DNSStubListener=no` | `/etc/systemd/resolved.conf` | **not captured** — needed for Pi-hole |
-| `/mnt/docker/traefik3/rules/middleware-chains.yml` | NFS (Synology) | **not in git** — contents in §7; without it every router breaks |
+| `/mnt/docker/traefik3/rules/middleware-chains.yml` | NFS (Synology) | **not in git** — contents in §7; without it every chained router breaks (`dsm-photo-rtr`, `http-catchall` and the DSM TCP routers do not use the chains) |
 | Plex library database | `/usr/local/plex` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 
