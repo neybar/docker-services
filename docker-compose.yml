@@ -144,6 +144,10 @@ volumes:
       device: :/volume1/docker/kometa
 
 ######### SECRETS
+# Compose-level guard: an empty bouncer key fails closed (plugin rejects it, crowdsec@docker is never built, every chained router breaks),
+# so refuse to render the config at all. Extension field, unused otherwise.
+x-require-crowdsec-bouncer-key: ${CROWDSEC_BOUNCER_KEY:?set CROWDSEC_BOUNCER_KEY in .env (openssl rand -hex 32); an empty key fails closed}
+
 secrets:
   crowdsec_bouncer_key:
     environment: CROWDSEC_BOUNCER_KEY
@@ -254,7 +258,10 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      # Traefik's docker provider skips containers that are not `healthy`, traefik itself included, so crowdsec@docker (defined by its labels)
+      # does not exist until the first check passes and every chained router 404s. Poll fast at start to shrink that window.
+      start_period: 30s
+      start_interval: 1s
     logging: *default-logging
     labels:
       - "traefik.enable=true"
@@ -277,19 +284,22 @@ services:
       - "traefik.http.routers.traefik-rtr.middlewares=chain-authelia@file"
       ## CrowdSec bouncer middleware (referenced as crowdsec@docker, first entry of the chains in rules/middleware-chains.yml)
       ## Stream mode: banned IPs are cached locally and refreshed from the LAPI every 60s.
-      ## FAIL OPEN: if CrowdSec is down, traffic passes (updateMaxFailure=-1, AppSec *Block=false); Authelia remains the auth layer.
+      ## FAIL OPEN: if CrowdSec is down, traffic passes (updateMaxFailure=-1, AppSec failure/unreachable Block=false); Authelia remains the auth layer. Unreadable bodies are blocked, not passed.
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.enabled=true"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecMode=stream"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecLapiHost=crowdsec:8080"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecLapiKeyFile=/run/secrets/crowdsec_bouncer_key"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.updateMaxFailure=-1"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.streamStartupBlock=false"
-      ## AppSec (WAF) on crowdsec:7422. Fail open on every error path; the AppSec key defaults to the LAPI key.
+      ## AppSec (WAF) on crowdsec:7422. Fail open on error paths except unreadable bodies (blocked); the AppSec key defaults to the LAPI key.
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecAppsecEnabled=true"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecAppsecHost=crowdsec:7422"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecAppsecFailureBlock=false"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecAppsecUnreachableBlock=false"
-      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecAppsecUnreadableBodyBlock=false"
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.crowdsecAppsecUnreadableBodyBlock=true"
+      ## Bodies the plugin cannot read (HTTP/2/3 without Content-Length) would otherwise reach AppSec header-only, bypassing body inspection, so they are blocked.
+      ## httpTimeoutSeconds bounds the latency added when CrowdSec is slow (LAPI stream and AppSec).
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer.httpTimeoutSeconds=2"
 
   # CrowdSec - Security Engine: reads the Traefik access log (no Docker API access; Authelia logs are not read), bans attackers (bouncer in Traefik enforces)
   # Config + SQLite DB live on local disk, not NFS. Pre-registers the Traefik bouncer key on first start.

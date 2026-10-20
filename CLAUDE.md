@@ -139,7 +139,7 @@ The full log is **sensitive**: it records query strings, so API keys passed as `
 - **CrowdSec** (WAF): Traefik plugin `crowdsec@docker` (labels on the `traefik` service) does stream-mode bans (LAPI `crowdsec:8080`, refresh 60s) and AppSec (`crowdsec:7422`)
   on each request. Config + DB on local disk (see Storage); `acquis.d/` is tracked and mounted read-only.
   - **Fails open on purpose** (Authelia is still the auth layer): `updateMaxFailure=-1` (the default `0` would block *all* traffic once the LAPI is unreachable in stream mode),
-    `streamStartupBlock=false` (Traefik does not wait for CrowdSec at start, so banned IPs pass for ~60s until the first sync), and AppSec unreachable / failure / unreadable-body all pass.
+    `streamStartupBlock=false` (Traefik does not wait for CrowdSec at start, so banned IPs pass for ~60s until the first sync), and AppSec unreachable / failure pass. **Unreadable bodies are the exception and block** (`crowdsecAppsecUnreadableBodyBlock=true`): HTTP/2/3 requests without Content-Length would otherwise reach AppSec header-only and skip body inspection. `httpTimeoutSeconds=2` bounds the latency added when CrowdSec is slow.
     Verified: crowdsec stopped 100s, services kept answering, `/.env` was not blocked.
   - **Whitelisting**: parser `crowdsecurity/whitelists` (127/8, 10/8, 172.16/12, 192.168/16, ::1) suppresses *bans* for LAN and docker nets. It does **not** exempt AppSec *blocking*:
     a LAN `/.env` probe gets 403 and an alert, no ban. Tests from this host therefore see 403s.
@@ -157,11 +157,15 @@ The full log is **sensitive**: it records query strings, so API keys passed as `
   - **Docker access**: none. CrowdSec is on `t2_proxy` only, not on `socket_proxy`, and has no socket mount.
   - **Ping**: `/ping` is on an unpublished `ping` entrypoint (`:8082`), not on the published `:8080` one; `http`, `https` and `dsm-admin` are set `asDefault=true` so `ping` does not become a default entrypoint for routers without explicit entryPoints. The healthcheck must repeat `--ping.entryPoint=ping --entryPoints.ping.address=:8082`
     because `traefik healthcheck` does not read the daemon's flags.
-  - **Bouncer key rotation**: key mismatch silently disables the WAF (fail-open); an *empty* key fails closed (`deploy.sh` and `validate-waf.sh` check for it). Procedure: `REBUILD.md` §7.
+  - **Bouncer key rotation**: key mismatch silently disables the WAF (fail-open); an *empty* key fails closed (`docker compose config` refuses to render without it via `x-require-crowdsec-bouncer-key`; `validate-waf.sh` also checks). Procedure: `REBUILD.md` §7.
   - **Rollback order is mandatory** (remove `crowdsec@docker` from the NFS chains *before* reverting, or every chained router breaks), as is the merge procedure: `REBUILD.md` §7.
   - **Bypass**: file-provider router `dsm-photo-rtr` (`rules/synology.yml`, `home.thelances.net/photo` to Synology :80) has no middlewares and no entryPoints, so it skips CrowdSec and Authelia on all default entrypoints (`http`, `https`, `dsm-admin`).
     Pre-existing, not changed (`REBUILD.md` §8).
   - **Traefik file rules**: Traefik does **not** reload edits to `/mnt/docker/traefik3/rules/` (NFS, no inotify). Run `docker compose restart traefik` after editing.
-    Each Traefik start logs a ~1s burst of `middleware "crowdsec@docker" does not exist` errors (file provider loads before the docker provider); harmless.
+    Each Traefik start logs a burst of `middleware "crowdsec@docker" does not exist` errors, and the chained routers 404 until it ends. Cause (Traefik source, `keepContainer` in `pkg/provider/docker/config.go`, v3.6):
+    the docker provider skips containers whose health is not `healthy`, including `traefik` itself, which defines `crowdsec@docker` and `redirect-to-https` via labels. The window lasts until the first healthcheck passes.
+    Measured with `restart traefik` (probe every 0.25s): before, ~2s connection refused + ~4.5s of 404 (6.4s total); with `start_interval: 1s`, ~2.2s refused + ~2s of 404 (3.9s total). Not harmless: expect ~4s of errors per restart.
+  - **Tainted collections**: `cscli collections list` shows `appsec-crs`, `base-http-scenarios` and `traefik` as `enabled,tainted`. Cause (`cscli collections inspect`, `tainted_by`): `DISABLE_SCENARIOS` removes
+    `crowdsec-appsec-outofband` and `http-crawl-non_statics`, which those collections contain, and `traefik` is tainted via `base-http-scenarios`. Consequence: tainted items are skipped by hub upgrades, so those three collections do not update until the scenarios are re-enabled.
   - **Follow-ups / out of scope** (DSM TCP passthrough, CRS in-band, Authelia log acquisition, rules into repo, Cloudflare `trustedIPs`): see `REBUILD.md` §8.
 - **Home Assistant**: Privileged mode with host network (required for device access)

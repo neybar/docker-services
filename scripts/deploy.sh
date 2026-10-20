@@ -80,10 +80,6 @@ fi
 echo "==> Validating compose file"
 docker compose config --quiet
 
-# An empty bouncer key fails closed: the plugin rejects it, crowdsec@docker is never built, and every chained router breaks.
-grep -Eq '^CROWDSEC_BOUNCER_KEY=.+' "$DEPLOY_DIR/.env" \
-    || die "CROWDSEC_BOUNCER_KEY is missing or empty in $DEPLOY_DIR/.env; see REBUILD.md (CrowdSec)"
-
 echo "==> docker compose up -d --build --remove-orphans"
 docker compose up -d --build --remove-orphans
 

@@ -182,9 +182,9 @@ docker compose up -d
 ### CrowdSec (WAF)
 
 1. Generate the bouncer key and put it in `.env`: `openssl rand -hex 32` -> `CROWDSEC_BOUNCER_KEY=`.
-   **An empty key fails closed**: the plugin rejects it, `crowdsec@docker` is never built, and every chained router breaks. `deploy.sh` and `validate-waf.sh` refuse/fail on it.
+   **An empty key fails closed**: the plugin rejects it, `crowdsec@docker` is never built, and every chained router breaks. `docker compose config` (so also `deploy.sh`, before `up`) refuses to render without it, and `validate-waf.sh` fails on it.
    Both containers read it as the compose secret `crowdsec_bouncer_key`; crowdsec registers it as bouncer `traefik` at start (`/run/secrets/bouncer_key_traefik`), so no `cscli bouncers add` is needed.
-2. `$LOCALDOCKERDIR/crowdsec/{config,data}` and `$LOCALDOCKERDIR/traefik-logs` are created by Docker on first start (as `root`). Nothing to restore (see §5).
+2. `$LOCALDOCKERDIR/crowdsec/{config,data}` and `$LOCALDOCKERDIR/traefik-logs` are created on first start if missing (as `root`); pre-creating them as your user also works. Nothing to restore (see §5).
    Create `$LOCALDOCKERDIR/traefik-logs` yourself first with mode 700 (`install -d -m 700 $LOCALDOCKERDIR/traefik-logs`); containers run as root, so CrowdSec and Traefik are unaffected.
    Rotation (`traefik-logrotate.sh`, 00:10) keeps the current file + 2 rotated. Lines written between the rename and Traefik's USR1 reopen land in the rotated file and are not parsed (accepted gap).
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
@@ -218,8 +218,8 @@ docker compose up -d
    ```
 
    The `middlewares-*` definitions live in `middlewares.yml` in the same `rules/` directory (also not in git; not reproduced here).
-4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS. A ~1s burst of
-   `middleware "crowdsec@docker" does not exist` errors at each start is harmless.
+4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS. A burst of
+   `middleware "crowdsec@docker" does not exist` errors at each start is expected, not harmless: Traefik's docker provider skips containers that are not `healthy`, `traefik` itself included, so the chained routers 404 until its first healthcheck passes (`start_interval: 1s`). Measured ~2s refused + ~2s of 404 per restart.
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
 
 Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowdsec@docker` lines from the three chains and `docker compose restart traefik`,
@@ -227,7 +227,7 @@ Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowds
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
 `docker compose exec crowdsec cscli bouncers delete traefik`, and delete every `traefik@<ip>` entry too (CrowdSec creates these when the same key connects from a new IP; `cscli bouncers list` shows them), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d crowdsec traefik`,
-run `./scripts/validate-waf.sh`. Fail-open means a key mismatch silently disables the WAF; `validate-waf.sh` is what detects it.
+run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 without Content-Length) are blocked, not passed (`crowdsecAppsecUnreadableBodyBlock=true`). Fail-open means a key mismatch silently disables the WAF; `validate-waf.sh` is what detects it.
 
 Docker access: none. CrowdSec does not read Authelia logs: the only way without a log file was Docker API access, which cannot be scoped below
 "read every container's env/filesystem" with tecnativa socket-proxy. Authelia brute force is covered by its own `regulation:` (max_retries 3, find_time 120, ban_time 300,
