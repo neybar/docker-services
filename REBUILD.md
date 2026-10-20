@@ -236,7 +236,7 @@ CRS out-of-band is alerts only: its ban scenario `crowdsecurity/crowdsec-appsec-
 **Merging the CrowdSec PR.** The live stack already runs the branch and the NFS chains already reference `crowdsec@file`, so do **not** run `docker compose up` from `master`
 before the PR is merged (it would remove the mount and the middleware). Procedure: merge the PR, `git switch master` in the deploy checkout, `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
 The merge-triggered deploy refuses while the checkout is on the feature branch; that is expected. See `docs/DEPLOY.md`.
-Chains cover every router except the file-provider `dsm-photo-rtr` (see §8).
+Chains cover every HTTP router except the file-provider `dsm-photo-rtr` and `http-catchall` (redirect to HTTPS only, no backend). The DSM TCP passthrough routers `grond-https-rtr`/`grond-admin-rtr` are TCP, so no HTTP middleware applies (see §8).
 The Traefik access log holds API keys from query strings (`$LOCALDOCKERDIR/traefik-logs`, `root:root` 0644).
 
 Expected validation result on the current host: **27 pass, 2 fail**.

@@ -7,7 +7,7 @@ Local Traefik plugins, loaded via Traefik's `experimental.localPlugins` so Traef
 - Purpose: CrowdSec bouncer middleware for Traefik.
 - Upstream: https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
 - Pinned tag: v1.7.1
-- Commit SHA: bc83e9d0924b9fefcaed5beea880ab18b9f58764
+- Commit SHA: bef5dfaadbb07381af02ec4e7391e49214ebf953 (annotated tag object: bc83e9d0924b9fefcaed5beea880ab18b9f58764)
 - Vendored: 2026-10-19 (source tarball from the tag, top-level directory stripped)
 - Location: `src/github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/`
 - Trimmed to what Traefik loads at runtime: `bouncer.go`, `version.go`, `pkg/`, `vendor/`, `go.mod`, `go.sum`,
