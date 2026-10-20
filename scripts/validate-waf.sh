@@ -34,14 +34,7 @@ cd "$PROJECT_DIR" || exit 1
 
 # Function to get HTTP status code for a path on TEST_HOST
 http_status() {
-    local path="$1" code
-    if [[ -n "${HOST_IP:-}" ]]; then
-        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k \
-            --resolve "${TEST_HOST}:443:${HOST_IP}" "https://${TEST_HOST}${path}" 2>/dev/null) || true
-    else
-        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -k "https://${TEST_HOST}${path}" 2>/dev/null) || true
-    fi
-    echo "${code:-000}"
+    curl_status "$TEST_HOST" "$1" --max-time 15
 }
 
 echo -e "${BLUE}1. Testing Containers${NC}"

@@ -184,11 +184,11 @@ docker compose up -d
 1. Generate the bouncer key and put it in `.env`: `openssl rand -hex 32` -> `CROWDSEC_BOUNCER_KEY=`.
    **An empty key fails closed**: the plugin rejects it, `crowdsec@file` is never built, and every chained router breaks. `docker compose config` (so also `deploy.sh`, before `up`) refuses to render without it, and `validate-waf.sh` fails on it.
    Both containers read it as the compose secret `crowdsec_bouncer_key`; crowdsec registers it as bouncer `traefik` at start (`/run/secrets/bouncer_key_traefik`), so no `cscli bouncers add` is needed.
-2. `$LOCALDOCKERDIR/crowdsec/{config,data}` and `$LOCALDOCKERDIR/traefik-logs` are created on first start if missing (as `root`); pre-creating them as your user also works. Nothing to restore (see §5).
-   Create `$LOCALDOCKERDIR/traefik-logs` yourself first with mode 700 (`install -d -m 700 $LOCALDOCKERDIR/traefik-logs`); containers run as root, so CrowdSec and Traefik are unaffected.
+2. `$LOCALDOCKERDIR/crowdsec/{config,data}` are created on first start if missing (as `root`); pre-creating them as your user also works. Nothing to restore (see §5).
+   Pre-create `$LOCALDOCKERDIR/traefik-logs` yourself with mode 700 (`install -d -m 700 $LOCALDOCKERDIR/traefik-logs`): docker would otherwise create it `root` 755, and the log holds API keys. Containers run as root, so CrowdSec and Traefik are unaffected. The rotation job re-enforces `chmod 700` on it every run.
    Rotation (`traefik-logrotate.sh`, 00:10) is copytruncate: copy to `access.log.<timestamp>`, truncate in place. Traefik opens the file `O_APPEND` and CrowdSec re-opens a truncated file, so nothing is missed; only the archive can lose a line written between the copy and the truncate. Keeps the current file + 2 rotated.
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
-3. Create `/mnt/docker/traefik3/rules/middleware-chains.yml` with exactly this content. It is **not in git**; `crowdsec@file` is defined by the tracked `traefik-rules/crowdsec.yml`, which compose bind-mounts read-only at `/config/rules/crowdsec.yml` (nested inside the NFS `traefik_config` volume, so an empty placeholder `crowdsec.yml` appears in `/mnt/docker/traefik3/rules/`; harmless):
+3. Create `/mnt/docker/traefik3/rules/middleware-chains.yml` with exactly this content. It is **not in git**; `crowdsec@file` is defined by the tracked `traefik-rules/crowdsec.yml`, whose directory `traefik-rules/` compose bind-mounts read-only at `/config/rules/repo/` (a subdirectory of the file provider dir, nested inside the NFS `traefik_config` volume, so an empty `repo/` directory appears in `/mnt/docker/traefik3/rules/`; harmless):
 
    ```yaml
    http:
@@ -218,15 +218,15 @@ docker compose up -d
    ```
 
    The `middlewares-*` definitions live in `middlewares.yml` in the same `rules/` directory (also not in git; not reproduced here).
-4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS. Measured per restart: ~2s connection refused, no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
+4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS (no inotify), and the file provider never watches subdirectories, so this also applies to `traefik-rules/crowdsec.yml`. `deploy.sh` runs `up -d`, which recreates traefik only when its compose config changes, so a merge that changes only `traefik-rules/` does **not** reach the running Traefik: restart it by hand. Measured per restart: ~2s connection refused, no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
 
 Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowdsec@file` lines from the three chains and `docker compose restart traefik`,
 *then* revert the PR. Reverting first auto-deploys and removes the mount (so `crowdsec@file`) while the NFS chains still reference it, so every chained router breaks.
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
-`docker compose exec crowdsec cscli bouncers delete traefik`, and delete every `traefik@<ip>` entry too (CrowdSec creates these when the same key connects from a new IP; `cscli bouncers list` shows them), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d crowdsec traefik`,
-run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 without Content-Length) are blocked, not passed (`crowdsecAppsecUnreadableBodyBlock=true`). Fail-open means a key mismatch silently disables the WAF; `validate-waf.sh` is what detects it.
+`docker compose exec crowdsec cscli bouncers delete traefik`, and delete every `traefik@<ip>` entry too (CrowdSec creates these when the same key connects from a new IP; `cscli bouncers list` shows them), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
+run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 without Content-Length) are blocked, not passed (`crowdsecAppsecUnreadableBodyBlock=true`, the plugin default). Fail-open means a key mismatch silently disables the WAF; `validate-waf.sh` is what detects it.
 
 Docker access: none. CrowdSec does not read Authelia logs: the only way without a log file was Docker API access, which cannot be scoped below
 "read every container's env/filesystem" with tecnativa socket-proxy. Authelia brute force is covered by its own `regulation:` (max_retries 3, find_time 120, ban_time 300,

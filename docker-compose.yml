@@ -181,7 +181,6 @@ services:
       - --entryPoints.dsm-admin.asDefault=true
         # Allow these IPs to set the X-Forwarded-* headers - Cloudflare IPs: https://www.cloudflare.com/ips/
       - --entrypoints.https.forwardedHeaders.trustedIPs=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/12,172.64.0.0/13,131.0.72.0/22
-      - --entryPoints.traefik.address=:8080
       - --entryPoints.ping.address=:8082 # Ping only; not published
       - --api=true
 #      - --api.insecure=true
@@ -189,7 +188,7 @@ services:
       - --log=true
       - --log.level=ERROR # (Default: error) DEBUG, INFO, WARN, ERROR, FATAL, PANIC
       - --ping=true # Health endpoint, used by the healthcheck below
-      - --ping.entryPoint=ping # Own unpublished entrypoint, so /ping is not served on the published :8080
+      - --ping.entryPoint=ping # Own unpublished entrypoint
       - --accessLog=true
       # Full access log (no status filter) on local disk: CrowdSec reads it, and its scenarios need 2xx/3xx too.
       # Rotated daily by task-scheduler (traefik-logrotate.sh): copy, then truncate in place (Traefik opens the file O_APPEND).
@@ -232,10 +231,6 @@ services:
         published: 443
         protocol: udp
         mode: host
-      - target: 8080
-        published: 8080
-        protocol: tcp
-        mode: host
       - target: 5001
         published: 5001
         protocol: tcp
@@ -246,8 +241,10 @@ services:
       - $LOCALDOCKERDIR/acme:/config/acme
       - $LOCALDOCKERDIR/plugins-local:/plugins-local:ro
       - $LOCALDOCKERDIR/traefik-logs:/logs
-      # CrowdSec middleware definition (crowdsec@file), nested inside the NFS /config volume like hydra's DB mount; see the file header
-      - $LOCALDOCKERDIR/traefik-rules/crowdsec.yml:/config/rules/crowdsec.yml:ro
+      # Tracked rules (crowdsec@file), nested inside the NFS /config volume like hydra's DB mount; see traefik-rules/crowdsec.yml.
+      # A directory, not the file: a single-file bind mount pins the inode, so an editor/git/cp that replaces the file leaves Traefik on the old one.
+      # The file provider loads subdirectories of /config/rules (but does not watch them: restart traefik after a change).
+      - $LOCALDOCKERDIR/traefik-rules:/config/rules/repo:ro
     environment:
       - CF_API_EMAIL=$CLOUDFLARE_EMAIL
       - CF_API_KEY=$CLOUDFLARE_API_KEY

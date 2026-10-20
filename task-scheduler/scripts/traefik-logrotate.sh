@@ -13,6 +13,9 @@ ROTATED="$LOG.$(date +%Y%m%d-%H%M%S)"
 
 echo "[$(date)] Rotating Traefik access log..."
 
+# The log holds API keys from query strings: re-enforce a private directory every run (REBUILD.md pre-creates it 700)
+chmod 700 "$LOG_DIR" || echo "[$(date)] WARNING: could not chmod 700 $LOG_DIR."
+
 if [ ! -f "$LOG" ]; then
     echo "[$(date)] ERROR: $LOG not found."
     exit 1
@@ -25,7 +28,8 @@ if ! cp -p "$LOG" "$ROTATED"; then
     exit 1
 fi
 
-if ! : > "$LOG"; then
+# truncate, not `: > file`: a failed redirect on a special builtin exits a POSIX shell, so the error branch below was unreachable
+if ! truncate -s 0 "$LOG"; then
     echo "[$(date)] ERROR: Failed to truncate $LOG; $ROTATED is a duplicate of it."
     exit 1
 fi

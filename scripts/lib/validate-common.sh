@@ -4,7 +4,7 @@
 #
 # Caller contract: set PROJECT_DIR before calling load_env, then call load_env "$@" (sets DOMAIN, HOST_IP),
 # print_banner "<title>", and finish with print_summary. Provides colors, the PASSED/FAILED/WARNINGS
-# counters and print_result. The caller keeps its own `set -uo pipefail`.
+# counters, print_result and the curl_resolved/curl_status helpers. The caller keeps its own `set -uo pipefail`.
 
 # Colors for output
 RED='\033[0;31m'
@@ -46,6 +46,24 @@ load_env() {
     else
         echo -e "${GREEN}Using local resolution: ${HOST_IP}${NC}"
     fi
+}
+
+# curl against <host>:<port>, pointing the connection at HOST_IP when set (local resolution) and ignoring TLS
+# verification. Usage: curl_resolved <host> <port> <url> [extra curl args...]. Prints curl's output; exit status is curl's.
+curl_resolved() {
+    local host="$1" port="$2" url="$3"
+    shift 3
+    local resolve=()
+    [[ -n "${HOST_IP:-}" ]] && resolve=(--resolve "${host}:${port}:${HOST_IP}")
+    curl -s -k "${resolve[@]}" "$@" "$url" 2>/dev/null
+}
+
+# HTTP status code of https://<host><path>, 000 on failure. Usage: curl_status <host> <path> [extra curl args...]
+curl_status() {
+    local host="$1" path="$2" code
+    shift 2
+    code=$(curl_resolved "$host" 443 "https://${host}${path}" -o /dev/null -w "%{http_code}" "$@") || true
+    echo "${code:-000}"
 }
 
 # Banner with the script title and the resolved domain
