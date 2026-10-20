@@ -1,0 +1,7 @@
+# Traefik access log (written by Traefik to $LOCALDOCKERDIR/traefik-logs, mounted read-only here).
+# The "[g]" makes this a glob, so CrowdSec keeps watching for access.log to appear (e.g. on a fresh
+# host where crowdsec starts before Traefik has created it) and for the fresh file after log rotation.
+filenames:
+  - /var/log/traefik/access.lo[g]
+labels:
+  type: traefik

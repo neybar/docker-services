@@ -10,8 +10,10 @@ RUN chmod +x /usr/local/bin/*.sh
 # Create crontab file
 # Daily at midnight: Docker cleanup
 # Sunday at 3 AM: Plex restart (for VERSION=public to pick up updates)
+# Daily at 00:10: Traefik access log rotation
 RUN echo "0 0 * * * /usr/local/bin/docker-cleanup.sh >> /var/log/tasks.log 2>&1" > /etc/crontabs/root && \
-    echo "0 3 * * 0 /usr/local/bin/plex-restart.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root
+    echo "0 3 * * 0 /usr/local/bin/plex-restart.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root && \
+    echo "10 0 * * * /usr/local/bin/traefik-logrotate.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root
 
 # Create log file
 RUN touch /var/log/tasks.log

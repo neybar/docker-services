@@ -28,6 +28,7 @@ jobs:
           # Ignore sample files and directories
           ignore_paths: |
             .git
+            plugins-local
 
   docker-compose:
     name: Docker Compose Validation

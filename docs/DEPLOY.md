@@ -27,6 +27,8 @@ The script runs from the deploy checkout, so each deploy executes the `deploy.sh
 *before* the fast-forward. A change to `deploy.sh` takes effect on the deploy after the one that
 ships it.
 
+Working on a feature branch in the deploy checkout pauses auto-deploys: `deploy.sh` exits unless the checkout is on `master`. Switch back to `master` before merging.
+
 To run a deploy by hand: `./scripts/deploy.sh` (deploys the tip of `master`), or use
 **Actions > Deploy > Run workflow** on `master`.
 
@@ -99,6 +101,8 @@ The runner updates itself. To remove it: `sudo ./svc.sh stop && sudo ./svc.sh un
 
 A failed deploy leaves the checkout at the new commit and prints the commits it contained. It
 never resets automatically.
+
+**CrowdSec WAF:** rolling it back and merging its PR both have a mandatory order; follow `REBUILD.md` §7 before reverting or running `docker compose up` from `master`.
 
 **Normal path:** revert on `master` through a PR. Merging it deploys the revert.
 ```bash

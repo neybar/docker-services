@@ -6,3 +6,5 @@ acme/
 pihole/
 plex/
 slideshow_updater/
+/crowdsec/
+/traefik-logs/

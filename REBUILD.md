@@ -18,6 +18,7 @@ Start here, because these are the things a fresh host will not have and
 | 10 CIFS mounts (`/mnt/*`) | `/etc/fstab` | **not captured** — template below |
 | CIFS credentials | `/etc/cifspwd` (root, `0600`) | **secret, never commit** |
 | `DNSStubListener=no` | `/etc/systemd/resolved.conf` | **not captured** — needed for Pi-hole |
+| `/mnt/docker/traefik3/rules/middleware-chains.yml` | NFS (Synology) | **not in git** — contents in §7; without it every router breaks |
 | Plex library database | `/usr/local/plex` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 
@@ -80,7 +81,7 @@ touch the same files; see §5 for why that matters.
 
 ## 4. Docker networks
 
-Both are external and must exist before first run:
+`socket_proxy` and `t2_proxy` are external and must exist before first run:
 
 ```bash
 docker network create --gateway 192.168.90.1 --subnet 192.168.90.0/24 t2_proxy
@@ -103,6 +104,8 @@ looks healthy while doing it.
 | `/usr/local/plex` | Plex library DB (13GB) | **watch history, collections, ratings and metadata all gone** |
 | `/usr/local/nzbhydra2/database` | NZBHydra2 H2 database (98MB) | search history and stats lost; config is safe in `nzbhydra.yml` on NFS |
 | `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
+| `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
+| `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
 
 Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will
 initialise an empty library.
@@ -165,14 +168,77 @@ for this stack and is the natural home for it.
 
 ```bash
 git clone <repo> && cd docker-services
-cp env.example .env     # fill in all 21 variables
+cp env.example .env     # fill in all 22 variables (incl. CROWDSEC_BOUNCER_KEY, see below)
 # restore /usr/local/plex from backup FIRST (see §5)
 touch acme/acme.json && chmod 600 acme/acme.json
+# create /mnt/docker/traefik3/rules/middleware-chains.yml (see CrowdSec below)
 docker compose up -d
 ./scripts/validate-traefik.sh
+./scripts/validate-waf.sh
 ```
 
 `acme.json` must be `0600` or Traefik refuses to use it.
+
+### CrowdSec (WAF)
+
+1. Generate the bouncer key and put it in `.env`: `openssl rand -hex 32` -> `CROWDSEC_BOUNCER_KEY=`.
+   **An empty key fails closed**: the plugin rejects it, `crowdsec@docker` is never built, and every chained router breaks. `deploy.sh` and `validate-waf.sh` refuse/fail on it.
+   Both containers read it as the compose secret `crowdsec_bouncer_key`; crowdsec registers it as bouncer `traefik` at start (`/run/secrets/bouncer_key_traefik`), so no `cscli bouncers add` is needed.
+2. `$LOCALDOCKERDIR/crowdsec/{config,data}` and `$LOCALDOCKERDIR/traefik-logs` are created by Docker on first start (as `root`). Nothing to restore (see §5).
+   Create `$LOCALDOCKERDIR/traefik-logs` yourself first with mode 700 (`install -d -m 700 $LOCALDOCKERDIR/traefik-logs`); containers run as root, so CrowdSec and Traefik are unaffected.
+   Rotation (`traefik-logrotate.sh`, 00:10) keeps the current file + 2 rotated. Lines written between the rename and Traefik's USR1 reopen land in the rotated file and are not parsed (accepted gap).
+   On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
+3. Create `/mnt/docker/traefik3/rules/middleware-chains.yml` with exactly this content. It is **not in git**; `crowdsec@docker` is defined by labels on the `traefik` service:
+
+   ```yaml
+   http:
+     middlewares:
+       chain-no-auth:
+         chain:
+           middlewares:
+             - "crowdsec@docker"
+             - "middlewares-rate-limit"
+             - "middlewares-secure-headers"
+
+       chain-basic-auth:
+         chain:
+           middlewares:
+             - "crowdsec@docker"
+             - "middlewares-rate-limit"
+             - "middlewares-secure-headers"
+             - "middlewares-basic-auth"
+
+       chain-authelia:
+         chain:
+           middlewares:
+             - "crowdsec@docker"
+             - "middlewares-rate-limit"
+             - "middlewares-secure-headers"
+             - "middlewares-authelia"
+   ```
+
+   The `middlewares-*` definitions live in `middlewares.yml` in the same `rules/` directory (also not in git; not reproduced here).
+4. `docker compose restart traefik` after creating or editing the file — Traefik does not see edits on NFS. A ~1s burst of
+   `middleware "crowdsec@docker" does not exist` errors at each start is harmless.
+5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
+
+Rollback if the WAF misbehaves. **Order is mandatory**: first remove the `crowdsec@docker` lines from the three chains and `docker compose restart traefik`,
+*then* revert the PR. Reverting first auto-deploys and removes the middleware while the NFS chains still reference it, so every chained router breaks.
+
+Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
+`docker compose exec crowdsec cscli bouncers delete traefik`, and delete every `traefik@<ip>` entry too (CrowdSec creates these when the same key connects from a new IP; `cscli bouncers list` shows them), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d crowdsec traefik`,
+run `./scripts/validate-waf.sh`. Fail-open means a key mismatch silently disables the WAF; `validate-waf.sh` is what detects it.
+
+Docker access: none. CrowdSec does not read Authelia logs: the only way without a log file was Docker API access, which cannot be scoped below
+"read every container's env/filesystem" with tecnativa socket-proxy. Authelia brute force is covered by its own `regulation:` (max_retries 3, find_time 120, ban_time 300,
+in `/mnt/docker/authelia/configuration.yml`). Scenario `crowdsecurity/http-crawl-non_statics` is disabled (`DISABLE_SCENARIOS`): it would ban our own WAN IP.
+CRS out-of-band is alerts only: its ban scenario `crowdsecurity/crowdsec-appsec-outofband` is also disabled there until tuned.
+
+**Merging the CrowdSec PR.** The live stack already runs the branch and the NFS chains already reference `crowdsec@docker`, so do **not** run `docker compose up` from `master`
+before the PR is merged (it would remove the middleware). Procedure: merge the PR, `git switch master` in the deploy checkout, `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
+The merge-triggered deploy refuses while the checkout is on the feature branch; that is expected. See `docs/DEPLOY.md`.
+Chains cover every router except the file-provider `dsm-photo-rtr` (see §8).
+The Traefik access log holds API keys from query strings (`$LOCALDOCKERDIR/traefik-logs`, `root:root` 0644).
 
 Expected validation result on the current host: **27 pass, 2 fail**.
 
@@ -198,5 +264,17 @@ Known gaps, for later work:
 - [ ] `TODO-local-configs.md` reconciled: hydra already moved off NFS; the
       remaining services still need it, and `LOCALDOCKERDIR` must be repointed
       to the NVMe first
+- [ ] DSM `home.thelances.net` is TCP TLS passthrough, so the HTTP WAF cannot inspect it. Covering it needs the host
+      `cs-firewall-bouncer` + nftables (needs sudo)
+- [ ] File-provider router `dsm-photo-rtr` (`rules/synology.yml`, `home.thelances.net/photo` to Synology :80) has no middlewares and no entryPoints,
+      so it bypasses CrowdSec and Authelia on all default entrypoints (`http`, `https`, `dsm-admin`). Pre-existing; not changed
+- [ ] CrowdSec CRS after a tuning period: re-enable the `crowdsecurity/crowdsec-appsec-outofband` ban scenario (remove it from `DISABLE_SCENARIOS`), then consider in-band blocking (`crs-inband`); today CRS is out-of-band, alerts only
+- [ ] Authelia upgrade (running 4.21.0). Afterwards set `log_file_path` to a local-disk file and add a CrowdSec file acquisition for it
+      (needs a rotation design, like `traefik-logrotate.sh`); until then Authelia is protected by its own `regulation:` only
+- [ ] Move `/mnt/docker/traefik3/rules` into the repo (the chain file is only documented in §7)
+- [ ] Vestigial Cloudflare `trustedIPs` on the https entrypoint: DNS is not Cloudflare-proxied (resolves directly to the WAN IP), so any
+      Cloudflare-origin request can spoof `X-Forwarded-For`. Flagged, not changed
+- [ ] WAN-source ban test: only LAN/hairpinned sources could be tested, and the parser whitelist was not exercised by a non-whitelisted source
+- [ ] Human browser checks of the WAF: Plex playback, HA UI, Calibre upload, Organizr iframes, Sonarr/Radarr UI actions, SABnzbd NZB upload
 - [ ] `.claude/plans/typed-wondering-hennessy.md`, referenced by
       `TODO-local-configs.md`, does not exist — either restore or drop the link
