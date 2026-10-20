@@ -15,6 +15,8 @@ A merge to `master` updates the running stack on orcrist. Nothing else deploys.
    - fetches `master` over HTTPS and fast-forwards (`--ff-only`) to exactly `$GITHUB_SHA`. If HEAD
      already contains that commit (a newer one is deployed), it exits without doing anything.
    - runs `docker compose config --quiet`, then `docker compose up -d --build --remove-orphans`
+   - restarts traefik if anything in `traefik-rules/` is newer than its last start (Traefik does not watch
+     that directory, and `up -d` does not recreate traefik when only the rules changed)
    - prints the old→new commits, the changed files and `docker compose ps`
 
    `up -d` only recreates containers whose configuration changed. It never pulls newer images;
@@ -116,6 +118,7 @@ git push -u origin HEAD && gh pr create
 cd /home/jalance/Projects/docker-services
 git reset --hard <previous-good-sha>
 docker compose up -d --build --remove-orphans
+docker compose restart traefik   # if traefik-rules/ changed: Traefik does not watch it, and up -d does not reload it
 ```
 Then still revert on `master`. Otherwise the next deploy fast-forwards straight back to the bad
 commit. Because your local `master` is behind `origin/master`, that fast-forward will succeed.

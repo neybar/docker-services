@@ -19,7 +19,8 @@ http:
           crowdsecLapiKeyFile: /run/secrets/crowdsec_bouncer_key
           updateMaxFailure: -1
           streamStartupBlock: false
-          # AppSec (WAF) on crowdsec:7422. Fail open on error paths; unreadable bodies are blocked (plugin default); the AppSec key defaults to the LAPI key.
+          # AppSec (WAF) on crowdsec:7422. Fails open only if AppSec is unreachable or answers 500/502/503/504; any other error (e.g. 401 for an
+          # unknown key) blocks. Unreadable bodies are blocked (plugin default); the AppSec key defaults to the LAPI key.
           crowdsecAppsecEnabled: true
           crowdsecAppsecHost: crowdsec:7422
           crowdsecAppsecFailureBlock: false

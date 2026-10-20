@@ -8,7 +8,7 @@
 #   GITHUB_SHA  commit to deploy (set by Actions); defaults to the tip of master
 #
 # Fast-forwards the checkout and runs `docker compose up -d --build --remove-orphans`, then restarts traefik
-# if traefik-rules/ changed (Traefik does not watch it).
+# if traefik-rules/ changed since it started (Traefik does not watch it).
 # Never pulls images (upgrades are a deliberate, separate step) and never resets on failure.
 # See docs/DEPLOY.md.
 
@@ -78,6 +78,8 @@ else
     echo "(no new commits; reconciling containers with the current compose file)"
 fi
 
+[[ -d traefik-rules ]] || die "traefik-rules/ is missing; Traefik would start without its chains"
+
 echo "==> Validating compose file"
 docker compose config --quiet
 
@@ -85,10 +87,17 @@ echo "==> docker compose up -d --build --remove-orphans"
 docker compose up -d --build --remove-orphans
 
 # Traefik does not watch ./traefik-rules (see the traefik service in docker-compose.yml), and `up -d` does not recreate it
-# when only the rules changed, so restart it to load them.
-if [[ "$old" != "$new" ]] && ! git diff --quiet "$old" "$new" -- traefik-rules; then
-    echo "==> traefik-rules/ changed: docker compose restart traefik"
-    docker compose restart traefik
+# when only the rules changed. Restart it if anything in the directory (files, or the directory itself for adds/removes)
+# is newer than its last start. This compares against what Traefik loaded, not the deployed range, so rules left behind by
+# a failed deploy or committed without a restart are applied too.
+traefik_id=$(docker compose ps -q traefik)
+if [[ -n "$traefik_id" ]]; then
+    started=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' "$traefik_id")" +%s)
+    rules_mtime=$(find traefik-rules -printf '%T@\n' | sort -n | tail -1)
+    if ((${rules_mtime%.*} >= started)); then
+        echo "==> traefik-rules/ changed since traefik started: docker compose restart traefik"
+        docker compose restart traefik
+    fi
 fi
 
 echo "==> docker compose ps"

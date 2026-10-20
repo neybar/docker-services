@@ -206,8 +206,8 @@ in `/mnt/docker/authelia/configuration.yml`). Scenario `crowdsecurity/http-crawl
 CRS out-of-band is alerts only: its ban scenario `crowdsecurity/crowdsec-appsec-outofband` is also disabled there until tuned.
 
 **Merging the CrowdSec PR.** The live stack already runs the branch. Do not `git switch master` before local `master` contains the merge: the old `master` has no
-`traefik-rules/`, so the switch deletes the directory under the running Traefik (it keeps its loaded config, but the next restart would come up without the chains
-until the directory is back). Running `docker compose up` from the old `master` puts Traefik back on the pre-WAF NFS rules (no outage, but no WAF).
+`traefik-rules/`, so the switch deletes the directory under the running Traefik (it keeps its loaded config, but a restart meanwhile would come up without the chains,
+and docker would recreate the directory empty and root-owned). Running `docker compose up` from the old `master` puts Traefik back on the pre-WAF NFS rules (no outage, but no WAF).
 Procedure: merge the PR, then in the deploy checkout `git fetch origin master:master && git switch master` (moves local `master` to the merge without touching
 the working tree, so `traefik-rules/` is unchanged), then `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
 The merge-triggered deploy refuses while the checkout is on the feature branch; that is expected. See `docs/DEPLOY.md`.
