@@ -40,8 +40,10 @@ jobs:
 
       # scripts/validate-traefik.sh is not run here: it probes the live services
       # through Traefik and needs the real domain and HOST_IP.
-      # No .env here; the compose file refuses to render without a bouncer key, so supply a dummy.
+      # No .env here; the compose file refuses to render without a bouncer key or a Cloudflare DNS token,
+      # so supply dummies.
       - name: Validate docker-compose.yml
         run: docker compose config --quiet
         env:
           CROWDSEC_BOUNCER_KEY: ci-dummy-not-a-secret
+          CLOUDFLARE_DNS_API_TOKEN: ci-dummy-not-a-secret
