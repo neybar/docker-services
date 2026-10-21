@@ -20,6 +20,7 @@ Start here, because these are the things a fresh host will not have and
 | `DNSStubListener=no` | `/etc/systemd/resolved.conf` | **not captured** — needed for Pi-hole |
 | Plex library database | `/usr/local/plex` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
+| DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
 ---
 
