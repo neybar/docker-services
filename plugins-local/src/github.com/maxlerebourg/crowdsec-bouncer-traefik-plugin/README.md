@@ -666,11 +666,7 @@ http:
             N2U=
             -----END CERTIFICATE-----
           crowdsecLapiTLSCertificateBouncerKey: |-
-            -----BEGIN RSA PRIVATE KEY-----
-            MIIEogIBAAKCAQEAtYQnbJqifH+ZymePylDxGGLIuxzcAUU4/ajNj+qRAdI/Ux3d
-            ...
-            ic5cDRo6/VD3CS3MYzyBcibaGaV34nr0G/pI+KEqkYChzk/PZRA=
-            -----END RSA PRIVATE KEY-----
+            XXXX-EXAMPLE-KEY-NOT-REAL-XXXX
           captchaProvider: hcaptcha
           captchaSiteKey: FIXME
           captchaSecretKey: FIXME
