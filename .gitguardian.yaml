@@ -1,0 +1,6 @@
+version: 2
+
+secret:
+  # Vendored upstream CrowdSec bouncer plugin: its docs/testData hold sample keys, not real secrets.
+  ignored_paths:
+    - plugins-local/src/github.com/maxlerebourg/**

@@ -8,5 +8,5 @@ summary: Middleware plugin which forwards the request IP to local Crowdsec agent
 
 testData:
   Enabled: false
-  CrowdsecLapiKey: 40796d93c2958f9e58345514e67740e5
+  CrowdsecLapiKey: XXXXXXXX-REPLACE-ME
 
