@@ -794,8 +794,8 @@ services:
       - 127.0.0.1
       - 1.1.1.1
     ports:
-      - "53:53/tcp"
-      - "53:53/udp"
+      - "${HOST_IP:?set HOST_IP in .env (host LAN IP; Pi-hole binds :53 only there)}:53:53/tcp"
+      - "${HOST_IP:?set HOST_IP in .env (host LAN IP; Pi-hole binds :53 only there)}:53:53/udp"
     environment:
       TZ: $TZ
       # Pi-hole v6 only reads FTLCONF_<section>_<setting>. The v5-era vars that used
