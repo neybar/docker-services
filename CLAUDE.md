@@ -42,7 +42,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | Media | Plex (GPU), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2 |
 | Collection Mgmt | Kometa (runs daily at 1 AM) |
 | Books | Calibre-Web, Lazy Librarian |
-| DNS | Pi-hole (host port 53) |
+| DNS | Pi-hole (host port 53 on `$HOST_IP` only) |
 | Home Automation | Home Assistant (privileged, host network) |
 | Dashboard | Organizr |
 | Utilities | iSponsorBlockTV, LibreSpeed, Smokeping, Slideshow Updater |
@@ -75,7 +75,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | `LOCALDOCKERDIR` | Local storage path (`/home/jalance/Projects/docker-services`, on the 1TB TeamGroup SATA SSD that replaced the failed 870 EVO on 2026-10-17). See `REBUILD.md` §5 |
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `CROWDSEC_BOUNCER_KEY` | Traefik-to-CrowdSec bouncer key (`openssl rand -hex 32`); passed to both CrowdSec (registers it as bouncer `traefik`) and Traefik as the compose secret `crowdsec_bouncer_key` |
-| `HOST_IP` | Host IP for DSM access through Traefik |
+| `HOST_IP` | Host LAN IP: DSM access through Traefik, local resolution in the validate scripts, and the only address Pi-hole binds :53 on (required by compose) |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa) |
 | `TMDB_API_READ_ACCESS_TOKEN` | TMDb v4 read token (used by Kometa) |
 
@@ -126,7 +126,7 @@ The full log is **sensitive**: it records query strings, so API keys passed as `
   services tolerate this; H2 does not. `stop_grace_period: 120s` is required so H2 can compact on shutdown.
   The path is not independently configurable — H2's URL is `${nzbhydra.dataFolder}/database/nzbhydra` — hence
   the nested mount.
-- **Pi-hole**: Host port 53. No systemd-resolved conflict — `DNSStubListener=no` is already set in
+- **Pi-hole**: Host port 53, bound to `$HOST_IP` only (not `0.0.0.0`). No systemd-resolved conflict — `DNSStubListener=no` is already set in
   `/etc/systemd/resolved.conf`. **Cold standby only** — NextDNS serves live DNS (host resolvers are
   `45.90.28.234`/`45.90.30.234`) and nothing points at Pi-hole; it is kept in case NextDNS is dropped.
   Runs v6, which reads **only** `FTLCONF_<section>_<setting>` env vars — all v5-style vars
