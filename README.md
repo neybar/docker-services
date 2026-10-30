@@ -18,7 +18,7 @@ Self-hosted services running on Docker Compose behind Traefik with a CrowdSec WA
 | Infrastructure | Docker Socket Proxy | internal only |
 | Infrastructure | CrowdSec (WAF) | internal only |
 | Infrastructure | Task Scheduler | internal only |
-| Infrastructure | Dolt (Beads) | `orcrist.thelances.net:3307` LAN only, no Traefik |
+| Infrastructure | Dolt (Beads) | `dort.thelances.net:3307` LAN only, no Traefik |
 | Dashboard | Organizr | `start.$DOMAINNAME` |
 | Media | Plex | `plex.$DOMAINNAME` |
 | Media | Sonarr | `sonarr.$DOMAINNAME` |
@@ -133,8 +133,8 @@ Before merging (deploy refuses to render without the password):
 
 1. Set `DOLT_BEADS_PASSWORD` in orcrist's `.env` (`openssl rand -hex 32`).
 2. `mkdir -p /mnt/backups/dolt`.
-3. **Done:** `orcrist.thelances.net` A `192.168.0.3`, DNS-only (verified via Cloudflare DoH). The `*.thelances.net` wildcard certificate covers that name.
-   Tailscale is resolved: dolt also publishes `100.66.84.41:3307` for grokbot-box (`tag:grokbot`); the tailnet ACL allows that device orcrist tcp 22/445/3307. Tailscale clients connect to `100.66.84.41` and must use TLS server name `orcrist.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public A record. If `tailscaled` is not up when the container starts, Docker cannot bind that address and dolt does not start. Start dolt after `tailscaled`. No systemd ordering is added.
+3. **Done:** `dort.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`), verified via Cloudflare DoH. The `*.thelances.net` wildcard covers `dort`. `dort.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
+   Tailscale is resolved: dolt also publishes `100.66.84.41:3307` for grokbot-box (`tag:grokbot`); the tailnet ACL allows that device orcrist tcp 22/445/3307. Tailscale clients connect to `100.66.84.41` and must use TLS server name `dort.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME. If `tailscaled` is not up when the container starts, Docker cannot bind that address and dolt does not start. Start dolt after `tailscaled`. No systemd ordering is added.
 4. After the container is up, `./scripts/dolt-add-db.sh <prefix>` for each Beads project, then `bd init --server --external` on the clients. Whether that init succeeds against the pre-created database was not executed here.
 
 ## Development
