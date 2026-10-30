@@ -133,7 +133,8 @@ Before merging (deploy refuses to render without the password):
 
 1. Set `DOLT_BEADS_PASSWORD` in orcrist's `.env` (`openssl rand -hex 32`).
 2. `mkdir -p /mnt/backups/dolt`.
-3. **Required:** a specific DNS-only `beads` record, or a NextDNS rewrite, to `192.168.0.3`. `beads.thelances.net` currently follows the `*.thelances.net` wildcard CNAME to the public IP. Tailscale (subnet route of `192.168.0.3/32` versus a hosts-file entry) is still open; see `dolt/RESTORE.md`.
+3. **Required:** a specific DNS-only `beads` record, or a NextDNS rewrite, to `192.168.0.3`. `beads.thelances.net` currently follows the `*.thelances.net` wildcard CNAME to the public IP.
+   Tailscale is resolved: dolt also publishes `100.66.84.41:3307` for grokbot-box (`tag:grokbot`); the tailnet ACL allows that device orcrist tcp 22/445/3307. If `tailscaled` is not up when the container starts, Docker cannot bind that address and dolt does not start. Start dolt after `tailscaled`. No systemd ordering is added.
 4. After the container is up, `./scripts/dolt-add-db.sh <prefix>` for each Beads project, then `bd init --server --external` on the clients. Whether that init succeeds against the pre-created database was not executed here.
 
 ## Development

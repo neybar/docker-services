@@ -444,7 +444,7 @@ services:
     logging: *default-logging
 
   # Dolt sql-server for Beads (bd). MySQL protocol, not HTTP: no Traefik labels, no Authelia.
-  # Published on the LAN address only. Clients connect as beads.$DOMAINNAME:3307.
+  # Published on the LAN address and on orcrist's Tailscale address. Clients connect as beads.$DOMAINNAME:3307.
   # Data is local disk. The Synology drops NFSv4 locks; do not move this to a NAS volume.
   dolt:
     container_name: dolt
@@ -457,6 +457,8 @@ services:
       - no-new-privileges:true
     ports:
       - "192.168.0.3:3307:3306" # never 0.0.0.0; orcrist LAN address
+      # grokbot-box (tag:grokbot). The tailnet ACL limits that device to orcrist tcp 22/445/3307.
+      - "100.66.84.41:3307:3306"
     volumes:
       - $LOCALDOCKERDIR/dolt/data:/var/lib/dolt
       - $LOCALDOCKERDIR/dolt/servercfg:/etc/dolt/servercfg.d:ro
