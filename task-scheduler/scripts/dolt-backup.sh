@@ -1,7 +1,7 @@
 #!/bin/sh
 # Nightly Dolt backup. Writes on local disk first, then copies to /mnt/backups/dolt
-# (Grond) when that path is a mount. Dated SQL dumps are kept (14 days) so a
-# delete is not only mirrored away. The native dolt_backup sync IS a mirror.
+# (Grond) only when that path is a cifs or smb3 mount. Dated SQL dumps are kept
+# (14 days) so a delete is not only mirrored away. The native dolt_backup sync IS a mirror.
 #
 # bd export (JSONL) is not run here: bd is not installed in this image. See dolt/RESTORE.md.
 
@@ -59,14 +59,23 @@ rotate() {
 
 rotate "$LOCAL/sql"
 
-if grep -q ' /mnt/backups/dolt ' /proc/mounts; then
-    mkdir -p "$REMOTE/native" "$REMOTE/sql"
-    rsync -a --delete "$LOCAL/native/" "$REMOTE/native/"
-    rsync -a "$LOCAL/sql/" "$REMOTE/sql/"
-    rotate "$REMOTE/sql"
-    echo "[$(date)] Copied backups to $REMOTE"
-else
-    echo "[$(date)] WARNING: $REMOTE is not a mount; local backup kept, Grond copy skipped."
-fi
+# Field 3 is the filesystem type. Any bind mount matches a mountpoint check,
+# including an empty directory Docker created while the host CIFS share is down.
+grond_fstype=$(awk '$2 == "/mnt/backups/dolt" { print $3; exit }' /proc/mounts)
+case $grond_fstype in
+    cifs | smb3)
+        mkdir -p "$REMOTE/native" "$REMOTE/sql"
+        # --delete mirrors branch deletions and must not run against a local dir.
+        if [ "$grond_fstype" = cifs ] || [ "$grond_fstype" = smb3 ]; then
+            rsync -a --delete "$LOCAL/native/" "$REMOTE/native/"
+        fi
+        rsync -a "$LOCAL/sql/" "$REMOTE/sql/"
+        rotate "$REMOTE/sql"
+        echo "[$(date)] Copied backups to $REMOTE ($grond_fstype)"
+        ;;
+    *)
+        echo "[$(date)] WARNING: $REMOTE is not cifs or smb3 (type: ${grond_fstype:-not mounted}); local backup kept, Grond copy skipped."
+        ;;
+esac
 
 echo "[$(date)] Dolt backup complete."
