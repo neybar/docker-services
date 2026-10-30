@@ -444,7 +444,7 @@ services:
     logging: *default-logging
 
   # Dolt sql-server for Beads (bd). MySQL protocol, not HTTP: no Traefik labels, no Authelia.
-  # Published on the LAN address and on orcrist's Tailscale address. Clients connect as dort.thelances.net:3307.
+  # Published on the LAN address and on orcrist's Tailscale address. Clients connect as dolt.thelances.net:3307.
   # Data is local disk. The Synology drops NFSv4 locks; do not move this to a NAS volume.
   dolt:
     container_name: dolt

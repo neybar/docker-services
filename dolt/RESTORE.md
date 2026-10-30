@@ -1,6 +1,6 @@
 # Dolt (Beads) restore and bring-up
 
-MySQL-protocol server for [Beads](https://github.com/gastownhall/beads) (`bd` v1.3.x). Not HTTP: no Traefik router, no Authelia. Published on `192.168.0.3:3307` and `100.66.84.41:3307` (orcrist's Tailscale address). Clients use `dort.thelances.net`, the same way as every other service (`BEADS_DOLT_SERVER_TLS=1` sets the MySQL driver's `tls=true`, which verifies the certificate and the hostname). `dort.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
+MySQL-protocol server for [Beads](https://github.com/gastownhall/beads) (`bd` v1.3.x). Not HTTP: no Traefik router, no Authelia. Published on `192.168.0.3:3307` and `100.66.84.41:3307` (orcrist's Tailscale address). Clients use `dolt.thelances.net`, the same way as every other service (`BEADS_DOLT_SERVER_TLS=1` sets the MySQL driver's `tls=true`, which verifies the certificate and the hostname). `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
 
 Data is `$LOCALDOCKERDIR/dolt/data` on the host SSD. Do not put it on the Synology share (NFSv4 lock revocation). Native backups and dated SQL dumps are written there first (`$LOCALDOCKERDIR/dolt/backups`), then copied to `/mnt/backups/dolt` when that CIFS mount is present.
 
@@ -16,7 +16,7 @@ Do this **before merging**. A merge to `master` deploys, and `docker compose con
    Hex only. The init script rejects quotes, backslashes, and whitespace because the value is interpolated into SQL.
 2. `mkdir -p /mnt/backups/dolt` on the Grond mount (`/mnt/backups` is already the CIFS share; see `REBUILD.md` §6).
 3. Confirm Traefik already has the `*.thelances.net` wildcard in `$LOCALDOCKERDIR/acme/acme.json`. Dolt waits until `dolt-certs.sh` extracts it. Nothing new to issue.
-4. **Done.** `dort.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`, DNS-only; verified via Cloudflare DoH). The `*.thelances.net` wildcard certificate covers `dort.thelances.net`.
+4. **Done.** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`, DNS-only; verified via Cloudflare DoH). The `*.thelances.net` wildcard certificate covers `dolt.thelances.net`.
 5. Tailscale is resolved. grokbot-box rejoined as `tag:grokbot`, and the tailnet ACL allows that device orcrist tcp 22/445/3307. Compose publishes `100.66.84.41:3307` as well as `192.168.0.3:3307`. If `tailscaled` is down when the container starts, Docker cannot bind `100.66.84.41` and dolt does not start; start it after `tailscaled`. No systemd change enforces that.
 6. After the stack is up, for each Beads project prefix (the `bd init -p` value, unique on this server):
    ```bash
@@ -25,22 +25,22 @@ Do this **before merging**. A merge to `master` deploys, and `docker compose con
    That creates the database and grants `beads` on it. `beads` has no privileges until you do this.
 7. On each client machine:
    ```bash
-   export BEADS_DOLT_SERVER_HOST=dort.thelances.net
+   export BEADS_DOLT_SERVER_HOST=dolt.thelances.net
    export BEADS_DOLT_SERVER_PORT=3307
    export BEADS_DOLT_SERVER_USER=beads
    export BEADS_DOLT_PASSWORD='<the secret>'
    export BEADS_DOLT_SERVER_TLS=1
    bd init --server --external -p <prefix>
    ```
-   Or the same password in `~/.config/beads/credentials` (`[dort.thelances.net:3307]`, mode `0600`). `--server-tls` is not persisted; keep the env var.
-   Tailscale clients (grokbot-box) connect to `100.66.84.41` and must use TLS server name `dort.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME.
+   Or the same password in `~/.config/beads/credentials` (`[dolt.thelances.net:3307]`, mode `0600`). `--server-tls` is not persisted; keep the env var.
+   Tailscale clients (grokbot-box) connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME.
    Setting `BEADS_DOLT_SERVER_PORT` also marks the server as externally managed, so `bd` does not try to start a local one.
 
 Password rotation later: change `.env`, `docker compose up -d --force-recreate dolt` (the secret is remounted; init does not re-run), then `docker exec dolt /docker-entrypoint-initdb.d/01-beads-user.sh`.
 
 ## Name and Tailscale
 
-1. **DNS is done.** `dort.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`), verified live via Cloudflare DoH. The `*.thelances.net` wildcard certificate covers `dort.thelances.net`. Clients must never hardcode `orcrist`.
+1. **DNS is done.** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`), verified live via Cloudflare DoH. The `*.thelances.net` wildcard certificate covers `dolt.thelances.net`. Clients must never hardcode `orcrist`.
 2. **Tailscale is resolved.** grokbot-box is on the tailnet as `tag:grokbot`. The ACL allows that tag to orcrist tcp 22/445/3307. Dolt publishes `100.66.84.41:3307` for that path, in addition to `192.168.0.3:3307`. `beads@'100.%'` matches a CGNAT source; MySQL patterns cannot express `100.64.0.0/10`, so `100.%` is wider than that range.
 
 ## Privileges
