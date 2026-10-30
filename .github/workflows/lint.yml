@@ -48,3 +48,4 @@ jobs:
           CROWDSEC_BOUNCER_KEY: ci-dummy-not-a-secret
           CLOUDFLARE_DNS_API_TOKEN: ci-dummy-not-a-secret
           HOST_IP: 192.0.2.1  # TEST-NET-1 (RFC 5737), never routable
+          DOLT_BEADS_PASSWORD: ci-dummy-not-a-secret

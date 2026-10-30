@@ -18,6 +18,7 @@ Self-hosted services running on Docker Compose behind Traefik with a CrowdSec WA
 | Infrastructure | Docker Socket Proxy | internal only |
 | Infrastructure | CrowdSec (WAF) | internal only |
 | Infrastructure | Task Scheduler | internal only |
+| Infrastructure | Dolt (Beads) | `beads.$DOMAINNAME:3307` LAN only, no Traefik |
 | Dashboard | Organizr | `start.$DOMAINNAME` |
 | Media | Plex | `plex.$DOMAINNAME` |
 | Media | Sonarr | `sonarr.$DOMAINNAME` |
@@ -52,6 +53,7 @@ Key variables:
 - `PLEX_TOKEN` — required for Kometa (get from Plex account settings)
 - `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
 - `CROWDSEC_BOUNCER_KEY` — Traefik/CrowdSec bouncer key (`openssl rand -hex 32`)
+- `DOLT_BEADS_PASSWORD` — Beads SQL password (`openssl rand -hex 32`, hex only). Compose secret, not a container env var. See [dolt/RESTORE.md](dolt/RESTORE.md)
 
 #### Cloudflare DNS token (`CLOUDFLARE_DNS_API_TOKEN`)
 
@@ -119,7 +121,20 @@ Task Scheduler handles routine maintenance automatically:
 - **Nightly at midnight**: Docker cleanup (prunes images/containers/volumes older than 7 days)
 - **Sundays at 3 AM**: Plex restart (picks up `VERSION=public` updates)
 - **Daily at 00:10**: Traefik access log rotation (current file + 2 rotated kept)
+- **Daily at 00:20**: Dolt certificate dump; Dolt restarts only when the cert changed
+- **Daily at 02:15**: Dolt backup (local disk, then `/mnt/backups/dolt`)
 - **Daily at 1 AM**: Kometa runs and updates Plex collections
+
+## Dolt (Beads)
+
+Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Checklist, grants, and restore steps: [dolt/RESTORE.md](dolt/RESTORE.md).
+
+Before merging (deploy refuses to render without the password):
+
+1. Set `DOLT_BEADS_PASSWORD` in orcrist's `.env` (`openssl rand -hex 32`).
+2. `mkdir -p /mnt/backups/dolt`.
+3. Decide the open questions in `dolt/RESTORE.md`: grey-cloud A record `beads` → `192.168.0.3` versus a NextDNS rewrite, and a Tailscale subnet route of `192.168.0.3/32` versus a hosts-file entry at orcrist's Tailscale IP.
+4. After the container is up, `./scripts/dolt-add-db.sh <prefix>` for each Beads project, then `bd init --server --external` on the clients. Whether that init succeeds against the pre-created database was not executed here.
 
 ## Development
 
