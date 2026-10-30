@@ -181,7 +181,7 @@ docker compose up -d
 
 `acme.json` must be `0600` or Traefik refuses to use it.
 
-Dolt publishes `3307` on `192.168.0.3` and on orcrist's Tailscale address `100.66.84.41` (grokbot-box, `tag:grokbot`; the tailnet ACL allows that device tcp 22/445/3307 on orcrist). If `tailscaled` is not up when the container starts, Docker cannot bind `100.66.84.41` and dolt fails to start. Start dolt after `tailscaled`. Nothing in systemd enforces that order.
+Dolt publishes `3307` on `192.168.0.3` and on orcrist's Tailscale address `100.66.84.41` (grokbot-box, `tag:grokbot`; the tailnet ACL allows that device tcp 22/445/3307 on orcrist). Clients use `orcrist.thelances.net` (DNS-only A to `192.168.0.3`; the `*.thelances.net` wildcard covers it). Tailscale clients connect to `100.66.84.41` and must use TLS server name `orcrist.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public A record. If `tailscaled` is not up when the container starts, Docker cannot bind `100.66.84.41` and dolt fails to start. Start dolt after `tailscaled`. Nothing in systemd enforces that order.
 
 ### CrowdSec (WAF)
 
