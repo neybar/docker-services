@@ -113,6 +113,16 @@ The full log is **sensitive**: it records query strings, so API keys passed as `
 
 **Never commit directly to master.** Always use a feature branch, push, and open a PR.
 
+**A PR is not done until its checks pass.** After `gh pr create` (and after every later push to the branch), run
+`gh pr checks <n> --watch` and confirm `gh pr view <n> --json mergeStateStatus` is `CLEAN`. On a failure, read the
+log (`gh run view <run> --log-failed`), fix it, push, and watch again. Never report a PR as ready while a check is failing or pending.
+
+**Before post-merge cleanup** (pull master, delete branches), confirm `gh pr view <n> --json state` is `MERGED`.
+`gh pr view` exits 0 for an open PR too, so its exit code proves nothing.
+
+**CI has no `.env`.** The "Validate docker-compose.yml" step in `.github/workflows/lint.yml` supplies a dummy value for
+every required `${VAR:?}` in compose. A new required variable needs a dummy value there too, or CI fails.
+
 ## Notes
 
 - **Plex**: LinuxServer.io image with `/dev/dri` GPU transcoding; `VERSION=public` enables auto-updates on container restart
