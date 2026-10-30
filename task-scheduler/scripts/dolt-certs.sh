@@ -59,6 +59,7 @@ mv "$DEST/certificate.crt.tmp" "$DEST/certificate.crt"
 mv "$DEST/privatekey.key.tmp" "$DEST/privatekey.key"
 
 echo "[$(date)] Certificate updated from $(basename "$pick")."
+# POST /containers/dolt/restart. CONTAINERS=1 matches /containers/*, and POST=1 allows the method. EXEC is not used.
 if docker restart dolt; then
     echo "[$(date)] dolt restarted to load the new certificate."
 else

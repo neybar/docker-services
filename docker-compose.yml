@@ -335,8 +335,7 @@ services:
     environment:
       - LOG_LEVEL=warning # debug,info,notice,warning,err,crit,alert,emerg
       - CONTAINERS=1
-      - POST=1 # Required for start/stop/restart operations
-      - EXEC=1 # dolt-backup.sh and dolt-certs.sh: exec into dolt, restart it. CONTAINERS=1 already allows reading container filesystems.
+      - POST=1 # Required for start/stop/restart. With CONTAINERS=1 this allows POST /containers/<id>/restart (plex-restart.sh, dolt-certs.sh). EXEC is not set.
       - DELETE=1 # Required for docker-gc to delete images/containers
       - INFO=1
       - IMAGES=1
@@ -422,7 +421,6 @@ services:
   # - Sunday at 3 AM: Plex restart (picks up VERSION=public updates)
   # - Daily at 00:10: Traefik access log rotation (copytruncate; keeps current + 2 rotated)
   # - Daily at 00:20: dump the wildcard cert for Dolt; restart dolt only if it changed
-  # - Daily at 02:15: Dolt backup (local disk, then /mnt/backups/dolt)
   task-scheduler:
     build: $LOCALDOCKERDIR/task-scheduler
     container_name: task-scheduler
@@ -435,8 +433,6 @@ services:
       - $LOCALDOCKERDIR/traefik-logs:/traefik-logs # Traefik access log rotation
       - $LOCALDOCKERDIR/acme/acme.json:/acme/acme.json:ro
       - $LOCALDOCKERDIR/dolt/certs:/dolt-certs
-      - $LOCALDOCKERDIR/dolt/backups:/dolt-backups
-      - /mnt/backups/dolt:/mnt/backups/dolt
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375

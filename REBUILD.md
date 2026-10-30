@@ -106,7 +106,7 @@ looks healthy while doing it.
 | `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
-| `$LOCALDOCKERDIR/dolt/data` | Dolt databases (Beads) | **every Beads project is gone** until restored from `$LOCALDOCKERDIR/dolt/backups` or `/mnt/backups/dolt` (`dolt/RESTORE.md`) |
+| `$LOCALDOCKERDIR/dolt/data` | Dolt databases (Beads) | **every Beads project is gone** until restored from a restic snapshot of `$LOCALDOCKERDIR/dolt/backups` (`dolt/RESTORE.md`) |
 | `$LOCALDOCKERDIR/dolt/certs` | wildcard PEM dumped from `acme.json` | nothing — `dolt-certs.sh` rewrites it; Dolt will not start until the files exist |
 
 Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will
@@ -149,7 +149,7 @@ new SSD. The failing-disk hold on `TODO-local-configs.md` no longer applies.
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
 | **Plex library DB** | `/usr/local/plex` | **NO — see below** |
 | NZBHydra2 H2 DB | `/usr/local/nzbhydra2/database` | no, and acceptable (history only) |
-| Dolt (Beads) | `$LOCALDOCKERDIR/dolt/data`, copied nightly to `/mnt/backups/dolt` | yes, once `dolt-backup.sh` has run (`dolt/RESTORE.md`) |
+| Dolt (Beads) | `$LOCALDOCKERDIR/dolt/backups` (under `/home`, so the daily restic job). Live `$LOCALDOCKERDIR/dolt/data` is excluded | yes, once `dolt-prebackup.sh` is hooked (`dolt/RESTORE.md`) |
 
 ### Plex database backup (required, not yet implemented)
 
