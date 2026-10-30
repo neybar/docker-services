@@ -16,7 +16,7 @@ Do this **before merging**. A merge to `master` deploys, and `docker compose con
    Hex only. The init script rejects quotes, backslashes, and whitespace because the value is interpolated into SQL.
 2. `mkdir -p /mnt/backups/dolt` on the Grond mount (`/mnt/backups` is already the CIFS share; see `REBUILD.md` §6).
 3. Confirm Traefik already has the `*.thelances.net` wildcard in `$LOCALDOCKERDIR/acme/acme.json`. Dolt waits until `dolt-certs.sh` extracts it. Nothing new to issue.
-4. DNS, still an open question (see below). Clients must resolve `beads.thelances.net` to `192.168.0.3` and the certificate must verify.
+4. **Required.** `beads.thelances.net` currently resolves through the `*.thelances.net` wildcard CNAME to the public IP. Dolt listens only on `192.168.0.3`, so that answer sends clients to the wrong host. Add a specific DNS-only (grey cloud) A record `beads` → `192.168.0.3`, or a NextDNS rewrite to that address. One of those two is required. Do not orange-cloud the name.
 5. Tailscale, still an open question (see below). This compose file publishes `192.168.0.3:3307` only.
 6. After the stack is up, for each Beads project prefix (the `bd init -p` value, unique on this server):
    ```bash
@@ -39,7 +39,7 @@ Password rotation later: change `.env`, `docker compose up -d --force-recreate d
 
 ## Open questions
 
-1. **Name resolution.** A Cloudflare DNS-only (grey cloud) A record `beads` → `192.168.0.3`, or a NextDNS rewrite instead. A public A record leaks the private address, which is minor. NextDNS DNS-rebinding protection may drop private answers; that was not checked. Do not proxy the record (orange cloud): Cloudflare does not speak MySQL.
+1. **Which private answer to publish (one is required).** A live lookup shows `beads.thelances.net` following the `*.thelances.net` wildcard CNAME to the public IP. Either a Cloudflare DNS-only A record `beads` → `192.168.0.3` or a NextDNS rewrite to that address fixes it. A public A record leaks the private address, which is minor. NextDNS DNS-rebinding protection may drop private answers; that was not checked. Do not proxy the record (orange cloud): Cloudflare does not speak MySQL.
 2. **Path from the Grok Bot box.** Tailscale on orcrist advertising `192.168.0.3/32`, plus an ACL that allows only that box to tcp/3307, or a hosts-file entry pointing `beads.thelances.net` at orcrist's Tailscale IP. The hosts-file option also needs port 3307 published on the Tailscale address. This change does not do that, and the repo has no Tailscale config. Whether Tailscale is installed on orcrist was not checked. `beads@'100.%'` exists so a CGNAT source address can log in if a subnet route presents one; MySQL patterns cannot express `100.64.0.0/10`, so `100.%` is wider than that range.
 
 ## Privileges
