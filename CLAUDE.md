@@ -31,6 +31,8 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
   silently starts Plex with an empty library. See `REBUILD.md` §5-6.
 - **Local disk** (`$LOCALDOCKERDIR/crowdsec/{config,data}`, `$LOCALDOCKERDIR/traefik-logs`): CrowdSec config + SQLite DB
   and Traefik's access log. Gitignored. Regenerable — losing it loses only decisions/alerts history.
+- **Local disk** (`$LOCALDOCKERDIR/dolt/{data,certs,backups}`): Dolt data, the dumped wildcard cert, and backups.
+  Not on the NAS (same NFSv4 lock issue as NZBHydra2). Losing `data/` loses every Beads database until a backup is restored. See `dolt/RESTORE.md`.
 - **Local NVME** (`/usr/local/nzbhydra2/database`): NZBHydra2's H2 database — mounted at `/config/database`,
   nested inside the NFS `/config`. Embedded random-access databases must not live on NFS (see Notes).
 
@@ -38,7 +40,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 
 | Category | Services |
 |----------|----------|
-| Infrastructure | Traefik, Socket Proxy, CrowdSec, Authelia, Portainer, Task Scheduler |
+| Infrastructure | Traefik, Socket Proxy, CrowdSec, Authelia, Portainer, Task Scheduler, Dolt (Beads; LAN `:3307` only, no Traefik) |
 | Media | Plex (GPU), Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2 |
 | Collection Mgmt | Kometa (runs daily at 1 AM) |
 | Books | Calibre-Web, Lazy Librarian |
@@ -62,6 +64,8 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 - `scripts/validate-waf.sh` — CrowdSec/AppSec validation script
 - `scripts/lib/validate-common.sh` — helpers shared by both validate scripts (colors, `.env` loading, counters, `print_result`); `.shellcheckrc` lets ShellCheck follow the `source`
 - `acme/acme.json` — Let's Encrypt certs (Traefik-managed, chmod 600)
+- `dolt/` — Dolt server YAML, beads-user init script, entrypoint, and `RESTORE.md`. Runtime data under `dolt/data` is gitignored
+- `scripts/dolt-add-db.sh` — create one Beads database and grant `beads` on it (no global grants)
 
 ## Environment Variables
 
@@ -76,6 +80,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `CROWDSEC_BOUNCER_KEY` | Traefik-to-CrowdSec bouncer key (`openssl rand -hex 32`); passed to both CrowdSec (registers it as bouncer `traefik`) and Traefik as the compose secret `crowdsec_bouncer_key` |
 | `HOST_IP` | Host LAN IP: DSM access through Traefik, local resolution in the validate scripts, and the only address Pi-hole binds :53 on (required by compose) |
+| `DOLT_BEADS_PASSWORD` | Password for the Dolt user `beads` (`openssl rand -hex 32`). Compose secret `dolt_beads_password`, not a container env var |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa) |
 | `TMDB_API_READ_ACCESS_TOKEN` | TMDb v4 read token (used by Kometa) |
 
@@ -182,4 +187,5 @@ every required `${VAR:?}` in compose. A new required variable needs a dummy valu
   - **Tainted collections**: `cscli collections list` shows `appsec-crs`, `base-http-scenarios` and `traefik` as `enabled,tainted`. Cause (`cscli collections inspect`, `tainted_by`): `DISABLE_SCENARIOS` removes
     `crowdsec-appsec-outofband` and `http-crawl-non_statics`, which those collections contain, and `traefik` is tainted via `base-http-scenarios`. Consequence: tainted items are skipped by hub upgrades, so those three collections do not update until the scenarios are re-enabled.
   - **Follow-ups / out of scope** (DSM TCP passthrough, CRS in-band, Authelia log acquisition, Cloudflare `trustedIPs`): see `REBUILD.md` §8.
+- **Dolt** (Beads): `dolthub/dolt-sql-server:2.6.1`, clients use `dolt.thelances.net` (DNS-only CNAME to `orcrist.thelances.net`, A `192.168.0.3`; the `*.thelances.net` wildcard covers `dolt`; the CNAME may be repointed, so clients must never hardcode `orcrist`). Ports `192.168.0.3:3307` and Tailscale `100.66.84.41:3307` (grokbot-box, `tag:grokbot`; ACL allows that device orcrist tcp 22/445/3307). Tailscale clients connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME. If `tailscaled` is down at start, Docker cannot bind the Tailscale address. TLS material is the Traefik wildcard via `dolt-certs.sh` (`docker restart`, which is POST `/containers/dolt/restart`; `CONTAINERS=1` and `POST=1` allow it, `EXEC` is off). Consistent snapshots are `scripts/dolt-prebackup.sh` on the host, before restic; exclude `dolt/data` from restic. `beads` has no `*.*` grants: Dolt 2.6.1 ignores database-name wildcards, and a global grant can `UPDATE mysql.user` and move `root` off localhost (verified). `./scripts/dolt-add-db.sh <prefix>` grants one database. `bd init --external` against that pre-created database is UNVERIFIED. `secure_file_priv=/secure-priv` because `LOAD_FILE` otherwise reads the secret. Details and the hand checklist: `dolt/RESTORE.md`.
 - **Home Assistant**: Privileged mode with host network (required for device access)

@@ -106,6 +106,8 @@ looks healthy while doing it.
 | `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
+| `$LOCALDOCKERDIR/dolt/data` | Dolt databases (Beads) | **every Beads project is gone** until restored from a restic snapshot of `$LOCALDOCKERDIR/dolt/backups` (`dolt/RESTORE.md`) |
+| `$LOCALDOCKERDIR/dolt/certs` | wildcard PEM dumped from `acme.json` | nothing — `dolt-certs.sh` rewrites it; Dolt will not start until the files exist |
 
 Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will
 initialise an empty library.
@@ -147,6 +149,7 @@ new SSD. The failing-disk hold on `TODO-local-configs.md` no longer applies.
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
 | **Plex library DB** | `/usr/local/plex` | **NO — see below** |
 | NZBHydra2 H2 DB | `/usr/local/nzbhydra2/database` | no, and acceptable (history only) |
+| Dolt (Beads) | `$LOCALDOCKERDIR/dolt/backups` (under `/home`, so the daily restic job). Live `$LOCALDOCKERDIR/dolt/data` is excluded | yes, once `dolt-prebackup.sh` is hooked (`dolt/RESTORE.md`) |
 
 ### Plex database backup (required, not yet implemented)
 
@@ -168,7 +171,7 @@ for this stack and is the natural home for it.
 
 ```bash
 git clone <repo> && cd docker-services
-cp env.example .env     # fill in all 22 variables (incl. CROWDSEC_BOUNCER_KEY, see below)
+cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY and DOLT_BEADS_PASSWORD, see below)
 # restore /usr/local/plex from backup FIRST (see §5)
 touch acme/acme.json && chmod 600 acme/acme.json
 docker compose up -d
@@ -177,6 +180,8 @@ docker compose up -d
 ```
 
 `acme.json` must be `0600` or Traefik refuses to use it.
+
+Dolt publishes `3307` on `192.168.0.3` and on orcrist's Tailscale address `100.66.84.41` (grokbot-box, `tag:grokbot`; the tailnet ACL allows that device tcp 22/445/3307 on orcrist). Clients use `dolt.thelances.net` (DNS-only CNAME to `orcrist.thelances.net`, A `192.168.0.3`; the `*.thelances.net` wildcard covers `dolt`). `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`. Tailscale clients connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME. If `tailscaled` is not up when the container starts, Docker cannot bind `100.66.84.41` and dolt fails to start. Start dolt after `tailscaled`. Nothing in systemd enforces that order.
 
 ### CrowdSec (WAF)
 

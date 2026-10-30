@@ -1,6 +1,8 @@
+FROM ldez/traefik-certs-dumper:v2.11.4 AS dumper
 FROM docker:cli
 
-# Install dcron (Alpine's cron daemon)
+# traefik-certs-dumper reads acme.json.
+COPY --from=dumper /usr/bin/traefik-certs-dumper /usr/local/bin/traefik-certs-dumper
 RUN apk add --no-cache dcron
 
 # Copy task scripts
@@ -13,7 +15,8 @@ RUN chmod +x /usr/local/bin/*.sh
 # Daily at 00:10: Traefik access log rotation
 RUN echo "0 0 * * * /usr/local/bin/docker-cleanup.sh >> /var/log/tasks.log 2>&1" > /etc/crontabs/root && \
     echo "0 3 * * 0 /usr/local/bin/plex-restart.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root && \
-    echo "10 0 * * * /usr/local/bin/traefik-logrotate.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root
+    echo "10 0 * * * /usr/local/bin/traefik-logrotate.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root && \
+    echo "20 0 * * * /usr/local/bin/dolt-certs.sh >> /var/log/tasks.log 2>&1" >> /etc/crontabs/root
 
 # Create log file
 RUN touch /var/log/tasks.log
@@ -26,6 +29,7 @@ RUN echo '#!/bin/sh' > /entrypoint.sh && \
     echo 'cat /etc/crontabs/root' >> /entrypoint.sh && \
     echo '# Run cleanup once on startup' >> /entrypoint.sh && \
     echo '/usr/local/bin/docker-cleanup.sh' >> /entrypoint.sh && \
+    echo '/usr/local/bin/dolt-certs.sh || echo "dolt cert refresh failed"' >> /entrypoint.sh && \
     echo '# Start cron in foreground' >> /entrypoint.sh && \
     echo 'crond -f -l 2' >> /entrypoint.sh && \
     chmod +x /entrypoint.sh

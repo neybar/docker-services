@@ -144,12 +144,16 @@ volumes:
 x-require-crowdsec-bouncer-key: ${CROWDSEC_BOUNCER_KEY:?set CROWDSEC_BOUNCER_KEY in .env (openssl rand -hex 32); an empty key fails closed}
 # Same guard for the DNS-challenge token: an empty one only surfaces as a failed cert renewal, weeks later.
 x-require-cloudflare-dns-api-token: ${CLOUDFLARE_DNS_API_TOKEN:?set CLOUDFLARE_DNS_API_TOKEN in .env (Cloudflare "Edit zone DNS" token for DOMAINNAME)}
+# Beads password. An empty one would create a passwordless remote SQL login. Not an env var on the container.
+x-require-dolt-beads-password: ${DOLT_BEADS_PASSWORD:?set DOLT_BEADS_PASSWORD in .env (openssl rand -hex 32)}
 
 secrets:
   crowdsec_bouncer_key:
     environment: CROWDSEC_BOUNCER_KEY
   cloudflare_dns_api_token:
     environment: CLOUDFLARE_DNS_API_TOKEN
+  dolt_beads_password:
+    environment: DOLT_BEADS_PASSWORD
 
 ########################### SERVICES
 services:
@@ -331,7 +335,7 @@ services:
     environment:
       - LOG_LEVEL=warning # debug,info,notice,warning,err,crit,alert,emerg
       - CONTAINERS=1
-      - POST=1 # Required for start/stop/restart operations
+      - POST=1 # Required for start/stop/restart. With CONTAINERS=1 this allows POST /containers/<id>/restart (plex-restart.sh, dolt-certs.sh). EXEC is not set.
       - DELETE=1 # Required for docker-gc to delete images/containers
       - INFO=1
       - IMAGES=1
@@ -416,6 +420,7 @@ services:
   # - Daily at midnight: Docker cleanup (prune images/containers/volumes older than 7 days)
   # - Sunday at 3 AM: Plex restart (picks up VERSION=public updates)
   # - Daily at 00:10: Traefik access log rotation (copytruncate; keeps current + 2 rotated)
+  # - Daily at 00:20: dump the wildcard cert for Dolt; restart dolt only if it changed
   task-scheduler:
     build: $LOCALDOCKERDIR/task-scheduler
     container_name: task-scheduler
@@ -426,9 +431,47 @@ services:
       - socket-proxy
     volumes:
       - $LOCALDOCKERDIR/traefik-logs:/traefik-logs # Traefik access log rotation
+      - $LOCALDOCKERDIR/acme/acme.json:/acme/acme.json:ro
+      - $LOCALDOCKERDIR/dolt/certs:/dolt-certs
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375
+      - DOMAINNAME=$DOMAINNAME
+    logging: *default-logging
+
+  # Dolt sql-server for Beads (bd). MySQL protocol, not HTTP: no Traefik labels, no Authelia.
+  # Published on the LAN address and on orcrist's Tailscale address. Clients connect as dolt.thelances.net:3307.
+  # Data is local disk. The Synology drops NFSv4 locks; do not move this to a NAS volume.
+  dolt:
+    container_name: dolt
+    image: dolthub/dolt-sql-server:2.6.1
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/usr/local/bin/dolt-entrypoint.sh"]
+    networks:
+      - default
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "192.168.0.3:3307:3306" # never 0.0.0.0; orcrist LAN address
+      # grokbot-box (tag:grokbot). The tailnet ACL limits that device to orcrist tcp 22/445/3307.
+      - "100.66.84.41:3307:3306"
+    volumes:
+      - $LOCALDOCKERDIR/dolt/data:/var/lib/dolt
+      - $LOCALDOCKERDIR/dolt/servercfg:/etc/dolt/servercfg.d:ro
+      - $LOCALDOCKERDIR/dolt/certs:/certs:ro
+      - $LOCALDOCKERDIR/dolt/init:/docker-entrypoint-initdb.d:ro
+      - $LOCALDOCKERDIR/dolt/backups:/backups
+      - $LOCALDOCKERDIR/dolt/secure-priv:/secure-priv
+      - $LOCALDOCKERDIR/dolt/entrypoint.sh:/usr/local/bin/dolt-entrypoint.sh:ro
+    secrets:
+      - dolt_beads_password
+    healthcheck:
+      # TCP only. `dolt sql` with no server opens the data directory and can hold its lock.
+      test: ["CMD-SHELL", "bash -c 'echo >/dev/tcp/127.0.0.1/3306'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     logging: *default-logging
 
   # Organizr - Unified Frontend
