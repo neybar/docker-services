@@ -62,6 +62,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 - `traefik-rules/` — **all** Traefik file-provider config: `middleware-chains.yml`, `middlewares.yml`, `crowdsec.yml` (the `crowdsec@file` middleware), and the routers for services outside compose (`homebridge.yml`, `synology.yml`). Bind-mounted read-only at `/rules` (the file provider directory). **Not watched**: `deploy.sh` restarts traefik when anything in `traefik-rules/` is newer than its last start; by hand, `docker compose restart traefik`. The domain is written as `{{ env "DOMAINNAME" }}` (Go template; `DOMAINNAME` is passed to the traefik container)
 - `plugins-local/` — vendored Traefik CrowdSec bouncer plugin (pinned tag + bump procedure in its `README.md`)
 - `scripts/validate-waf.sh` — CrowdSec/AppSec validation script
+- `.github/workflows/integration.yml` + `scripts/ci/` — runs the validate scripts for trusted PRs on the orcrist runner against the live stack (read-only); trigger rules in `docs/DEPLOY.md`
 - `scripts/lib/validate-common.sh` — helpers shared by both validate scripts (colors, `.env` loading, counters, `print_result`); `.shellcheckrc` lets ShellCheck follow the `source`
 - `acme/acme.json` — Let's Encrypt certs (Traefik-managed, chmod 600)
 - `dolt/` — Dolt server YAML, beads-user init script, entrypoint, and `RESTORE.md`. Copied to `/mnt/docker/dolt` at setup. The database is `/usr/local/dolt/data`, not in this repo

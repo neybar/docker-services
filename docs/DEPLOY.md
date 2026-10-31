@@ -43,7 +43,8 @@ To run a deploy by hand: `./scripts/deploy.sh` (deploys the tip of `master`), or
     `pull_request` or `pull_request_target`. It also checks `github.ref`, and `deploy.sh` refuses
     any commit that isn't on `master`.
   - `master` is protected, so changes land only through reviewed PRs.
-  - PR checks (`lint.yml`) use GitHub-hosted runners only.
+  - PR checks in `lint.yml` use GitHub-hosted runners only. `integration.yml` is the one PR workflow
+    that reaches the self-hosted runner, and only for trusted PRs; see [Integration tests](#integration-tests-prs).
   - Workflow runs from fork PRs need manual approval (see [Repo settings](#repo-settings)).
     **A PR that changes anything under `.github/` can target the self-hosted runner. Read it
     before you approve its workflow run.**
@@ -54,6 +55,52 @@ To run a deploy by hand: `./scripts/deploy.sh` (deploys the tip of `master`), or
   Review merges with that in mind.
 - Only you should have write access to the repo. A collaborator with write access could push a
   branch containing a workflow that runs on the runner.
+
+## Integration tests (PRs)
+
+`.github/workflows/integration.yml` runs the host-only checks for a PR on the `orcrist` runner, against the
+**live** stack. It does not deploy the PR, so a change to `traefik-rules/` or compose is not live while
+it is tested. What it tests from the PR: `docker compose config` with the real `.env`, the PR's own
+validate scripts against the running services, and the PR's `task-scheduler` image build.
+
+1. A **GitHub-hosted** `plan` job checks out `master`, fetches the PR head's objects (never checks them
+   out), diffs them, and runs `scripts/ci/integration-plan.sh`. That script decides alone, from its
+   inputs, whether to run and which checks to run. `scripts/ci/test-integration-plan.sh` tests it (run by `lint.yml`).
+2. If it says run, the `orcrist` job runs master's `scripts/ci/integration-run.sh`:
+   - fetches the PR head into a fresh repo under `$RUNNER_TEMP`, never the deploy checkout or a worktree of it
+   - symlinks the deploy checkout's `.env` into that repo and sets `COMPOSE_PROJECT_NAME` to the live project
+   - takes `flock` on the deploy directory, the same lock `deploy.yml` holds around `deploy.sh`, so a test
+     never overlaps a deploy (wait up to 30 min). A deploy by hand from a shell does not take the lock.
+   - runs the checks, then removes the temp repo and the throwaway image. It never runs
+     `docker compose up`, restarts nothing, and writes nothing in the deploy checkout.
+
+| PR | Runs? |
+|----|-------|
+| From a fork | Never, label or not |
+| Same repo, author not `neybar`, branch not `cursor/*`/`claude/*` | Never, label or not |
+| Changes `.github/**` or `scripts/ci/**` | Only on the event of `neybar` adding the `integration` label. A later push does not run: remove the label and add it again |
+| Has the `integration` label | Yes. If no stack path changed: all checks |
+| Changes a stack path below | Yes, those checks |
+| Anything else (docs) | No |
+
+| Changed path | Checks |
+|--------------|--------|
+| `docker-compose.yml` | `compose-config`, `traefik`, `waf` |
+| `env.example`, `scripts/deploy.sh` | `compose-config` |
+| `traefik-rules/**`, `crowdsec-config/**`, `plugins-local/**`, `scripts/lib/**` | `traefik`, `waf` |
+| `scripts/validate-traefik.sh` / `scripts/validate-waf.sh` | `traefik` / `waf` |
+| `task-scheduler/**` | `task-scheduler` (`docker build` under a throwaway tag) |
+| `dolt/**`, `scripts/dolt-*` | `dolt`: `scripts/validate-dolt.sh` if the PR has it, else a notice |
+
+`traefik` and `waf` are `scripts/validate-traefik.sh` and `scripts/validate-waf.sh`; they fail on
+anything that fails on the live stack, whether or not the PR caused it.
+
+Why `pull_request_target`: it runs the workflow file and `scripts/ci/` from `master`, so a PR cannot
+edit the gate or the runner steps. (`pull_request` would run the PR's copy of the workflow, which could
+drop the gate.) It uses no secrets and a read-only token. The PR's own code does run on the runner, with
+docker access (= root): its validate scripts and its `task-scheduler/Dockerfile`. That is why only
+same-repo PRs from trusted branches get there. Read-only is a property of those scripts, not something
+the workflow enforces. Changes to `scripts/ci/` or the workflows take effect after merge.
 
 ## Runner install (orcrist, once)
 
@@ -98,6 +145,7 @@ The runner updates itself. To remove it: `sudo ./svc.sh stop && sudo ./svc.sh un
 - **Settings > Code security**: make sure Dependabot is enabled. `.github/dependabot.yml` opens weekly
   PRs that update the action versions in the workflows. Those PRs run only on GitHub-hosted runners.
 - Keep branch protection on `master` (PR required).
+- **Issues > Labels**: a label named `integration` (see [Integration tests](#integration-tests-prs)).
 
 ## Rolling back
 

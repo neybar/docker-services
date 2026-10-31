@@ -27,5 +27,6 @@ jobs:
     steps:
       # No actions/checkout: deploy into the existing checkout, which holds .env and
       # the gitignored service data. deploy.sh fast-forwards it to $GITHUB_SHA.
+      # flock on the deploy directory: the lock integration.yml (scripts/ci/integration-run.sh) holds while it tests.
       - name: Deploy
-        run: '"$DEPLOY_DIR/scripts/deploy.sh"'
+        run: 'flock -w 1800 "$DEPLOY_DIR" "$DEPLOY_DIR/scripts/deploy.sh"'
