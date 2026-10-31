@@ -20,6 +20,9 @@ Start here, because these are the things a fresh host will not have and
 | `DNSStubListener=no` | `/etc/systemd/resolved.conf` | **not captured** — needed for Pi-hole |
 | Plex library database | `/usr/local/plex` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
+| Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
+| Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
+| `tailscaled` before dolt | systemd | **not enforced**: if `tailscaled` is down when dolt starts, Docker cannot bind `$TAILSCALE_IP` and dolt does not start; `docker compose up -d dolt` once it is up |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
 ---
@@ -106,8 +109,7 @@ looks healthy while doing it.
 | `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
-| `/usr/local/dolt/data` | Dolt databases (Beads), nested at `/config/data` | **every Beads project is gone** until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
-| `/mnt/docker/dolt` | Dolt config, certs, and backups (NFS `dolt_config`) | config is copied from git; certs are rewritten by `dolt-certs.sh`; backups are the latest snapshot only |
+| `/usr/local/dolt/data` | Dolt databases (Beads) and users, at `/var/lib/dolt` | **every Beads project is gone**, and init recreates only the `beads` users, until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
 
 Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will
 initialise an empty library.
@@ -149,7 +151,8 @@ new SSD. The failing-disk hold on `TODO-local-configs.md` no longer applies.
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
 | **Plex library DB** | `/usr/local/plex` | **NO — see below** |
 | NZBHydra2 H2 DB | `/usr/local/nzbhydra2/database` | no, and acceptable (history only) |
-| Dolt (Beads) | `/usr/local/dolt/data` on local NVMe; latest snapshot at `/mnt/docker/dolt/backups` (NAS) | the snapshot, once jalance's 03:00 crontab runs `dolt-prebackup.sh` (`dolt/RESTORE.md`). The live data directory is not on the NAS |
+| Dolt (Beads) data | `/usr/local/dolt/data` (local NVMe) | latest snapshot only, in `/mnt/docker/dolt/backups` (NAS), from jalance's 03:00 crontab (§1). No dated generations |
+| Dolt config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | yes, Synology; templates in `dolt/` |
 
 ### Plex database backup (required, not yet implemented)
 
@@ -171,17 +174,33 @@ for this stack and is the natural home for it.
 
 ```bash
 git clone <repo> && cd docker-services
-cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY and DOLT_BEADS_PASSWORD, see below)
+cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY, DOLT_BEADS_PASSWORD and TAILSCALE_IP, see below)
 # restore /usr/local/plex from backup FIRST (see §5)
 touch acme/acme.json && chmod 600 acme/acme.json
 docker compose up -d
 ./scripts/validate-traefik.sh
 ./scripts/validate-waf.sh
+./scripts/validate-dolt.sh
 ```
 
 `acme.json` must be `0600` or Traefik refuses to use it.
 
-Dolt publishes `3307` on `192.168.0.3` and on orcrist's Tailscale address `100.66.84.41` (grokbot-box, `tag:grokbot`; the tailnet ACL allows that device tcp 22/445/3307 on orcrist). Clients use `dolt.thelances.net` (DNS-only CNAME to `orcrist.thelances.net`, A `192.168.0.3`; the `*.thelances.net` wildcard covers `dolt`). `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`. Tailscale clients connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME. If `tailscaled` is not up when the container starts, Docker cannot bind `100.66.84.41` and dolt fails to start. Start dolt after `tailscaled`. Nothing in systemd enforces that order.
+### Dolt (Beads)
+
+Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `docker compose up`.
+
+1. In `.env`, set `DOLT_BEADS_PASSWORD` (`openssl rand -hex 32`, hex only) and `TAILSCALE_IP` (`tailscale ip -4`). `HOST_IP` is already set. Compose refuses to render without them.
+2. Stage the NAS config from the templates. Every subpath must exist, because compose mounts each one:
+   ```bash
+   mkdir -p /mnt/docker/dolt/servercfg /mnt/docker/dolt/init /mnt/docker/dolt/certs /mnt/docker/dolt/backups
+   cp dolt/servercfg/config.yaml /mnt/docker/dolt/servercfg/
+   cp dolt/init/01-beads-user.sh /mnt/docker/dolt/init/
+   ```
+   `servercfg/` must hold exactly one `*.yaml`. `certs/` is filled by `dolt-certs.sh` when task-scheduler starts. Until then, dolt's guard refuses to start, and it restarts on its own once the certs exist.
+3. Restore `/usr/local/dolt/data` from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`). Skip this only for a deliberately empty server, where init creates the `beads` users on the first start.
+4. Add the crontab line from §1.
+5. For each new Beads project, run `./scripts/dolt-add-db.sh <prefix>`.
+6. Run `./scripts/validate-dolt.sh`. Every check should pass; it has not yet been run on this host.
 
 ### CrowdSec (WAF)
 

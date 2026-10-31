@@ -437,7 +437,7 @@ services:
     volumes:
       - $LOCALDOCKERDIR/traefik-logs:/traefik-logs # Traefik access log rotation
       - $LOCALDOCKERDIR/acme/acme.json:/acme/acme.json:ro
-      - dolt_config:/dolt-config
+      - dolt_config:/dolt-config # dolt-certs.sh writes certs/
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375
@@ -445,26 +445,63 @@ services:
     logging: *default-logging
 
   # Dolt sql-server for Beads (bd). MySQL protocol, not HTTP: no Traefik labels, no Authelia.
-  # Published on the LAN address and on orcrist's Tailscale address. Clients connect as dolt.thelances.net:3307.
-  # Config (servercfg, init, entrypoint, certs, backups) is the NFS volume, copied from dolt/ in this repo to /mnt/docker/dolt.
-  # Only the database is local: nested bind /usr/local/dolt/data, same pattern as hydra's H2 database.
+  # Published on the LAN address and on the host's Tailscale address, never 0.0.0.0. Clients connect as dolt.$DOMAINNAME:3307.
+  # Config is on the NAS (dolt_config; dolt/ in this repo holds templates), mounted by subpath at the paths the image reads.
+  # The database is local at the image's own /var/lib/dolt (VOLUME, and the entrypoint's hardcoded .init_completed path).
   # secure_file_priv is an empty tmpfs at /secure-priv (nothing to persist).
   dolt:
     container_name: dolt
     image: dolthub/dolt-sql-server:2.6.1
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
+    # Guard, then the image entrypoint. With no single *.yaml in servercfg.d the image starts on its defaults:
+    # plaintext on 0.0.0.0, with the existing users in /var/lib/dolt. Refuse instead.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cfg=/etc/dolt/servercfg.d
+        fail() { echo "dolt: refusing to start: $$*" >&2; exit 1; }
+        for f in "$$cfg/config.yaml" /certs/certificate.crt /certs/privatekey.key; do
+          [ -s "$$f" ] || fail "$$f missing or empty"
+        done
+        [ "$$(find "$$cfg" -type f -name '*.yaml' | wc -l)" -eq 1 ] || fail "$$cfg must hold exactly one *.yaml"
+        grep -Eq '^[[:space:]]+require_secure_transport:[[:space:]]*true' "$$cfg/config.yaml" || fail "require_secure_transport is not true"
+        [ -f /var/lib/dolt/.init_completed ] || [ -s /docker-entrypoint-initdb.d/01-beads-user.sh ] || fail "first start without the init script"
+        exec tini -- docker-entrypoint.sh "$$@"
+      - dolt-guard
     networks:
       - default
     security_opt:
       - no-new-privileges:true
     ports:
-      - "192.168.0.3:3307:3306" # never 0.0.0.0; orcrist LAN address
-      # grokbot-box (tag:grokbot). The tailnet ACL limits that device to orcrist tcp 22/445/3307.
-      - "100.66.84.41:3307:3306"
+      - "${HOST_IP:?set HOST_IP in .env (host LAN IP)}:3307:3306"
+      # The tailnet ACL decides which devices reach this.
+      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env (host Tailscale IP, tailscale ip -4)}:3307:3306"
     volumes:
-      - dolt_config:/config
-      - /usr/local/dolt/data:/config/data
+      - /usr/local/dolt/data:/var/lib/dolt
+      - type: volume
+        source: dolt_config
+        target: /etc/dolt/servercfg.d
+        read_only: true
+        volume:
+          subpath: servercfg
+      - type: volume
+        source: dolt_config
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        volume:
+          subpath: init
+      - type: volume
+        source: dolt_config
+        target: /certs
+        read_only: true
+        volume:
+          subpath: certs
+      - type: volume
+        source: dolt_config
+        target: /backups
+        volume:
+          subpath: backups
     tmpfs:
       - /secure-priv
     secrets:

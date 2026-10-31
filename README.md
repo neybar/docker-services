@@ -18,7 +18,7 @@ Self-hosted services running on Docker Compose behind Traefik with a CrowdSec WA
 | Infrastructure | Docker Socket Proxy | internal only |
 | Infrastructure | CrowdSec (WAF) | internal only |
 | Infrastructure | Task Scheduler | internal only |
-| Infrastructure | Dolt (Beads) | `dolt.thelances.net:3307` LAN only, no Traefik |
+| Infrastructure | Dolt (Beads) | `dolt.$DOMAINNAME:3307` on LAN and Tailscale, TLS only, no Traefik |
 | Dashboard | Organizr | `start.$DOMAINNAME` |
 | Media | Plex | `plex.$DOMAINNAME` |
 | Media | Sonarr | `sonarr.$DOMAINNAME` |
@@ -53,7 +53,8 @@ Key variables:
 - `PLEX_TOKEN` — required for Kometa (get from Plex account settings)
 - `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
 - `CROWDSEC_BOUNCER_KEY` — Traefik/CrowdSec bouncer key (`openssl rand -hex 32`)
-- `DOLT_BEADS_PASSWORD` — Beads SQL password (`openssl rand -hex 32`, hex only). Compose secret, not a container env var. See [dolt/RESTORE.md](dolt/RESTORE.md)
+- `DOLT_BEADS_PASSWORD` — Beads SQL password (`openssl rand -hex 32`, hex only). Compose secret, not a container env var
+- `HOST_IP`, `TAILSCALE_IP` — host LAN and Tailscale addresses; Dolt publishes `:3307` on both
 
 #### Cloudflare DNS token (`CLOUDFLARE_DNS_API_TOKEN`)
 
@@ -127,15 +128,7 @@ Task Scheduler handles routine maintenance automatically:
 
 ## Dolt (Beads)
 
-Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Checklist, grants, and restore steps: [dolt/RESTORE.md](dolt/RESTORE.md).
-
-Before merging (deploy refuses to render without the password):
-
-1. Set `DOLT_BEADS_PASSWORD` in orcrist's `.env` (`openssl rand -hex 32`).
-2. Before merge, stage `/mnt/docker/dolt` and `/usr/local/dolt/data`, then add jalance's 03:00 crontab line. Exact commands are in [dolt/RESTORE.md](dolt/RESTORE.md). A merge to master deploys immediately.
-3. **Done:** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`), verified via Cloudflare DoH. The `*.thelances.net` wildcard covers `dolt`. `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
-   Tailscale is resolved: dolt also publishes `100.66.84.41:3307` for grokbot-box (`tag:grokbot`); the tailnet ACL allows that device orcrist tcp 22/445/3307. Tailscale clients connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME. If `tailscaled` is not up when the container starts, Docker cannot bind that address and dolt does not start. Start dolt after `tailscaled`. No systemd ordering is added.
-4. After the container is up, `./scripts/dolt-add-db.sh <prefix>` for each Beads project, then `bd init --server --external` on the clients. Whether that init succeeds against the pre-created database was not executed here.
+Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Its config lives on the NAS; `dolt/` holds templates. Details: the Dolt note in [CLAUDE.md](CLAUDE.md), restore: [dolt/RESTORE.md](dolt/RESTORE.md).
 
 ## Development
 
