@@ -1,134 +1,57 @@
-# Dolt (Beads) restore and bring-up
+# Dolt (Beads) restore
 
-MySQL-protocol server for [Beads](https://github.com/gastownhall/beads) (`bd` v1.3.x). Not HTTP: no Traefik router, no Authelia. Published on `192.168.0.3:3307` and `100.66.84.41:3307` (orcrist's Tailscale address). Clients use `dolt.thelances.net`, the same way as every other service (`BEADS_DOLT_SERVER_TLS=1` sets the MySQL driver's `tls=true`, which verifies the certificate and the hostname). `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
+How the service is set up (NAS config, local data, guard, privileges, backup cron): the Dolt note in `CLAUDE.md`. Bring-up on a fresh host: `REBUILD.md` §7.
 
-Config is the NFS volume `dolt_config` (`:/volume1/docker/dolt`), the same share as `/mnt/docker/dolt` on orcrist. The database is `/usr/local/dolt/data`, nested at `/config/data`, because Dolt cannot live on NFSv4 (lock revocation, same as NZBHydra2's H2 database). `scripts/dolt-prebackup.sh` overwrites `/config/backups` on that volume. `secure_file_priv` is an empty tmpfs at `/secure-priv`.
+Run everything from the deploy checkout on orcrist. None of these procedures has been exercised end to end yet.
 
-## What James must do by hand
+## What the backup holds
 
-Do this **before merging**. A merge to `master` deploys, and `docker compose config` (so `deploy.sh`) refuses to render without `DOLT_BEADS_PASSWORD`.
+`scripts/dolt-prebackup.sh` overwrites `/mnt/docker/dolt/backups` (`/backups` in the container) every night. There is one generation only, with no dated copies:
 
-1. On orcrist, in the deploy checkout's `.env` (never commit it):
-   ```bash
-   openssl rand -hex 32
-   # DOLT_BEADS_PASSWORD=<that value>
-   ```
-   Hex only. The init script rejects quotes, backslashes, and whitespace because the value is interpolated into SQL.
-2. **Before merge.** A merge to master deploys on the next push. Stage the NAS tree and the local data directory first, or dolt comes up with an empty database and refuses to start until the config files exist.
+- `native/<prefix>/`: `dolt_backup` mirror of each database (all branches and the working set). Branches deleted on the server disappear from it too.
+- `sql/<prefix>.sql`: `dolt dump -r sql` of each database's working set.
+- `grants.sql`: a `SHOW GRANTS` transcript for both `beads` hosts, plus `mysql.user`. It is a transcript to read, not a script to replay. Neither backup contains users.
 
-   From the deploy checkout, with the current container still on the old layout:
+`bd export --all --include-memories -o .beads/issues.jsonl` on a client is a human-readable issue export, not a backup.
 
-   ```bash
-   docker compose stop dolt
-   sudo mkdir -p /mnt/docker/dolt/servercfg /mnt/docker/dolt/init /mnt/docker/dolt/certs /mnt/docker/dolt/backups /usr/local/dolt
-   cp dolt/servercfg/config.yaml /mnt/docker/dolt/servercfg/config.yaml
-   cp dolt/init/01-beads-user.sh /mnt/docker/dolt/init/01-beads-user.sh
-   cp dolt/entrypoint.sh /mnt/docker/dolt/entrypoint.sh
-   # existing PEMs, if this host already ran dolt-certs.sh
-   cp -a "$LOCALDOCKERDIR/dolt/certs/." /mnt/docker/dolt/certs/ 2>/dev/null || true
-   # database off the checkout and onto the NVMe path
-   if [ -d "$LOCALDOCKERDIR/dolt/data" ]; then
-     sudo mv "$LOCALDOCKERDIR/dolt/data" /usr/local/dolt/data
-   else
-     sudo mkdir -p /usr/local/dolt/data
-   fi
-   ```
-
-   If the cert directory is still empty, `dolt-certs.sh` fills it from `acme.json` and restarts dolt. The entrypoint exits until `certificate.crt` and `privatekey.key` are there. It does not start on image defaults.
-
-   jalance's crontab (docker group, not root). The log is a path jalance can write:
-
-   ```bash
-   mkdir -p "$HOME/.local/state"
-   crontab -e
-   ```
-
-   ```cron
-   CRON_TZ=America/Denver
-   0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1
-   ```
-
-3. Confirm Traefik already has the `*.thelances.net` wildcard in `$LOCALDOCKERDIR/acme/acme.json`. `dolt-certs.sh` copies it into `/mnt/docker/dolt/certs`. Nothing new to issue.
-4. **Done.** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`, DNS-only; verified via Cloudflare DoH). The `*.thelances.net` wildcard certificate covers `dolt.thelances.net`.
-5. Tailscale is resolved. grokbot-box rejoined as `tag:grokbot`, and the tailnet ACL allows that device orcrist tcp 22/445/3307. Compose publishes `100.66.84.41:3307` as well as `192.168.0.3:3307`. If `tailscaled` is down when the container starts, Docker cannot bind `100.66.84.41` and dolt does not start; start it after `tailscaled`. No systemd change enforces that.
-6. After the stack is up, for each Beads project prefix (the `bd init -p` value, unique on this server):
-   ```bash
-   ./scripts/dolt-add-db.sh <prefix>
-   ```
-   That creates the database and grants `beads` on it. `beads` has no privileges until you do this.
-7. On each client machine:
-   ```bash
-   export BEADS_DOLT_SERVER_HOST=dolt.thelances.net
-   export BEADS_DOLT_SERVER_PORT=3307
-   export BEADS_DOLT_SERVER_USER=beads
-   export BEADS_DOLT_PASSWORD='<the secret>'
-   export BEADS_DOLT_SERVER_TLS=1
-   bd init --server --external -p <prefix>
-   ```
-   Or the same password in `~/.config/beads/credentials` (`[dolt.thelances.net:3307]`, mode `0600`). `--server-tls` is not persisted; keep the env var.
-   Tailscale clients (grokbot-box) connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME.
-   Setting `BEADS_DOLT_SERVER_PORT` also marks the server as externally managed, so `bd` does not try to start a local one.
-
-Password rotation later: change `.env`, `docker compose up -d --force-recreate dolt` (the secret is remounted; init does not re-run), then `docker exec dolt /docker-entrypoint-initdb.d/01-beads-user.sh`.
-
-## Name and Tailscale
-
-1. **DNS is done.** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`), verified live via Cloudflare DoH. The `*.thelances.net` wildcard certificate covers `dolt.thelances.net`. Clients must never hardcode `orcrist`.
-2. **Tailscale is resolved.** grokbot-box is on the tailnet as `tag:grokbot`. The ACL allows that tag to orcrist tcp 22/445/3307. Dolt publishes `100.66.84.41:3307` for that path, in addition to `192.168.0.3:3307`. `beads@'100.%'` matches a CGNAT source; MySQL patterns cannot express `100.64.0.0/10`, so `100.%` is wider than that range.
-
-## Privileges
-
-Verified against `dolthub/dolt-sql-server:2.6.1` (not against the `bd` binary):
-
-- Database-name wildcards are stored and then ignored. `GRANT ... ON \`db%\`.*` did not allow `INSERT` into `dbfoo`.
-- `GRANT ... ON *.*` does apply to new databases, and it includes `mysql.user`. `UPDATE mysql.user` changed `root` from `localhost` to `%`. A remote `root` login with an empty password then succeeded. `REVOKE` on `mysql.*` did not remove the global privilege.
-- `DROP DATABASE mysql` is rejected by the server. `DROP DATABASE` of an ordinary database is allowed when that database's `DROP` privilege is granted.
-- `LOAD_FILE` returned `/etc/passwd` and the password secret for a user with only `USAGE`, while `secure_file_priv` was empty. The server config sets `secure_file_priv` to `/secure-priv`.
-- An explicit `GRANT` on one database allowed `CREATE TABLE`, `INSERT`, `CALL DOLT_COMMIT('-Am', ...)`, and `CALL DOLT_CHECKOUT`.
-- `root@localhost` from another container was `Access denied`. A user limited to `192.168.0.%` was denied from `172.17.0.0/16`.
-- Non-TLS connections to the published port were rejected (`server does not allow insecure connections`). `SHOW VARIABLES LIKE 'require_secure_transport'` still reported `OFF`; the listener flag is what rejected the session.
-- `bd init --external` against a pre-created database: **UNVERIFIED** (no `bd` binary in this environment). In beads v1.3.2, `bd init` sets `CreateIfMissing` and runs `CREATE DATABASE` only when `SHOW DATABASES` does not already list the name. Pre-creating the database is what this grant model requires. Schema setup after that (`CREATE TABLE`, `DOLT_COMMIT`) matches statements that succeeded under the explicit grant, but `bd` itself was not executed.
-
-`beads` is one shared account for every project. It can drop tables in any database you have granted. It cannot create users or grant privileges.
-
-## Backups
-
-jalance's crontab runs `scripts/dolt-prebackup.sh` at 03:00 America/Denver. It uses the host Docker socket. If dolt is not running it logs that and exits 0. Otherwise, per non-system database, it overwrites the latest files on the NAS volume at `/config/backups` (`/mnt/docker/dolt/backups` on the host):
-
-1. `CALL dolt_backup('sync','nas')` to `native/<db>` (a mirror: deleted branches disappear at this path; there is no dated copy).
-2. `dolt dump -r sql` to `sql/<db>.sql`.
-3. `SHOW GRANTS` for both `beads` hosts, plus `mysql.user`, in `grants.sql`.
-
-`bd export` is the human-readable issue export and is not a full backup. Once `bd` is installed on a client that already points at this server:
+## One database, server running (SQL dump)
 
 ```bash
-bd export --all --include-memories -o "$PWD/.beads/issues.jsonl"
+./scripts/dolt-add-db.sh <prefix>     # empty database + grants, if it is gone
+docker compose exec -T -w /var/lib/dolt/<prefix> dolt dolt sql < /mnt/docker/dolt/backups/sql/<prefix>.sql
 ```
 
-Run that per workspace. It is not wired into `task-scheduler`.
+This loses history: the dump is the working set only.
 
-## Restore
+## Databases with history (native backup)
 
-The latest snapshot is already on the NAS at `/mnt/docker/dolt/backups` (inside the container, `/config/backups`). There is no older generation in this directory.
-
-SQL dump of one project (server can stay up; load into an empty database created by `scripts/dolt-add-db.sh`):
+`backup restore` needs nothing else to have the data directory open, so stop dolt first. The image's entrypoint starts a server, so override it:
 
 ```bash
-docker exec -i dolt dolt sql < /mnt/docker/dolt/backups/sql/<prefix>.sql
-```
-
-Native backup (all branches and the working set). Stop dolt first so nothing else has the data directory open:
-
-```bash
-docker run --rm \
+docker compose stop dolt
+sudo mkdir -p /usr/local/dolt/restore
+docker run --rm --entrypoint dolt -w /restore \
   -v /mnt/docker/dolt/backups/native/<prefix>:/backup:ro \
-  -v /tmp/dolt-restore-db:/restore \
-  dolthub/dolt-sql-server:2.6.1 \
-  dolt backup restore file:///backup /restore
+  -v /usr/local/dolt/restore:/restore \
+  dolthub/dolt-sql-server:2.6.1 backup restore file:///backup <prefix>
+sudo mv /usr/local/dolt/data/<prefix> /usr/local/dolt/restore/<prefix>.old 2>/dev/null || true
+sudo mv /usr/local/dolt/restore/<prefix> /usr/local/dolt/data/<prefix>
+docker compose up -d dolt
+./scripts/dolt-add-db.sh <prefix>     # re-grants beads; CREATE DATABASE IF NOT EXISTS is a no-op
 ```
 
-Stop the server, replace `/usr/local/dolt/data/<prefix>` with the restored directory, start the server, and run `scripts/dolt-add-db.sh <prefix>` again if the grants dump is what you are recovering (the native backup does not include users). Replay `grants.sql` only after reading it; it is a `SHOW GRANTS` transcript, not a `mysqldump` of the `mysql` database (`mysqldump` is not in the image).
+Delete `/usr/local/dolt/restore` once the restored data checks out.
 
-Users are recreated from the secret by the init script on an empty data directory. On an existing data directory, run `01-beads-user.sh` as above, then `dolt-add-db.sh` for each prefix.
+## Whole data directory lost
 
-Server YAML, the init script, and the entrypoint are in git under `dolt/` and on the NAS at `/mnt/docker/dolt`. The wildcard PEM is in `$LOCALDOCKERDIR/acme/acme.json` (Traefik) and is copied to `/mnt/docker/dolt/certs` by `dolt-certs.sh`. Losing `/usr/local/dolt/data` loses every project until you restore a backup.
+`/usr/local/dolt/data` is empty, so the next start runs init, which creates `beads@'192.168.0.%'` and `beads@'100.%'` from the compose secret. Restore each `native/<prefix>` into `/usr/local/dolt/data/<prefix>` as above while dolt is stopped. Then start dolt and run `./scripts/dolt-add-db.sh <prefix>` for each prefix. `root` is recreated by the image as `root@localhost` with no password.
+
+## Users on an existing data directory
+
+To re-create the `beads` users, or to apply a new `DOLT_BEADS_PASSWORD`, update `.env` and run `docker compose up -d --force-recreate dolt` to remount the secret. Init does not rerun, because `.init_completed` exists. Then:
+
+```bash
+docker compose exec -T dolt /docker-entrypoint-initdb.d/01-beads-user.sh
+```
+
+Finish with `./scripts/validate-dolt.sh`.

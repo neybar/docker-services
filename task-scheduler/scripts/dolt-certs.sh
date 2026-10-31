@@ -1,7 +1,9 @@
 #!/bin/sh
 # Dump the Let's Encrypt wildcard out of Traefik's acme.json and, if the PEM
 # changed, restart dolt so it loads the new files. Dolt reads TLS material only
-# at startup. One cert pair is installed at the paths in dolt/servercfg/config.yaml.
+# at startup. DEST is certs/ on the NAS volume dolt_config, which the dolt
+# container mounts read-only at /certs (the paths in dolt/servercfg/config.yaml).
+# Until both files exist, dolt's compose entrypoint guard refuses to start.
 
 set -eu
 
