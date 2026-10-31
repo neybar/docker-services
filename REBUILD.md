@@ -106,8 +106,8 @@ looks healthy while doing it.
 | `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
-| `$LOCALDOCKERDIR/dolt/data` | Dolt databases (Beads) | **every Beads project is gone** until restored from a restic snapshot of `$LOCALDOCKERDIR/dolt/backups` (`dolt/RESTORE.md`) |
-| `$LOCALDOCKERDIR/dolt/certs` | wildcard PEM dumped from `acme.json` | nothing — `dolt-certs.sh` rewrites it; Dolt will not start until the files exist |
+| `/usr/local/dolt/data` | Dolt databases (Beads), nested at `/config/data` | **every Beads project is gone** until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
+| `/mnt/docker/dolt` | Dolt config, certs, and backups (NFS `dolt_config`) | config is copied from git; certs are rewritten by `dolt-certs.sh`; backups are the latest snapshot only |
 
 Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will
 initialise an empty library.
@@ -149,7 +149,7 @@ new SSD. The failing-disk hold on `TODO-local-configs.md` no longer applies.
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
 | **Plex library DB** | `/usr/local/plex` | **NO — see below** |
 | NZBHydra2 H2 DB | `/usr/local/nzbhydra2/database` | no, and acceptable (history only) |
-| Dolt (Beads) | `$LOCALDOCKERDIR/dolt/backups` (under `/home`, so the daily restic job). Live `$LOCALDOCKERDIR/dolt/data` is excluded | yes, once `dolt-prebackup.sh` is hooked (`dolt/RESTORE.md`) |
+| Dolt (Beads) | `/usr/local/dolt/data` on local NVMe; latest snapshot at `/mnt/docker/dolt/backups` (NAS) | the snapshot, once jalance's 03:00 crontab runs `dolt-prebackup.sh` (`dolt/RESTORE.md`). The live data directory is not on the NAS |
 
 ### Plex database backup (required, not yet implemented)
 

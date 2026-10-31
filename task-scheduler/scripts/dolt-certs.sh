@@ -6,7 +6,7 @@
 set -eu
 
 SRC=/acme/acme.json
-DEST=/dolt-certs
+DEST=/dolt-config/certs
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 

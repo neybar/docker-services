@@ -122,7 +122,7 @@ Task Scheduler handles routine maintenance automatically:
 - **Sundays at 3 AM**: Plex restart (picks up `VERSION=public` updates)
 - **Daily at 00:10**: Traefik access log rotation (current file + 2 rotated kept)
 - **Daily at 00:20**: Dolt certificate dump; Dolt restarts only when the cert changed
-- **Daily at 03:30** (host `restic-backup.timer`, America/Denver): `scripts/dolt-prebackup.sh` writes a consistent snapshot under `$LOCALDOCKERDIR/dolt/backups`, then restic stores it. `$LOCALDOCKERDIR` is `/home/jalance/Projects/docker-services`, so it is inside the `/home` include
+- **Daily at 03:00** (jalance's crontab, `CRON_TZ=America/Denver`): `scripts/dolt-prebackup.sh` overwrites a consistent snapshot on the NAS at `/mnt/docker/dolt/backups`
 - **Daily at 1 AM**: Kometa runs and updates Plex collections
 
 ## Dolt (Beads)
@@ -132,7 +132,7 @@ Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Checkli
 Before merging (deploy refuses to render without the password):
 
 1. Set `DOLT_BEADS_PASSWORD` in orcrist's `.env` (`openssl rand -hex 32`).
-2. On orcrist, as root, hook the snapshot into restic and exclude the live data directory. Exact commands are in [dolt/RESTORE.md](dolt/RESTORE.md). A failure of the hook must not fail the restic unit.
+2. Before merge, stage `/mnt/docker/dolt` and `/usr/local/dolt/data`, then add jalance's 03:00 crontab line. Exact commands are in [dolt/RESTORE.md](dolt/RESTORE.md). A merge to master deploys immediately.
 3. **Done:** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`), verified via Cloudflare DoH. The `*.thelances.net` wildcard covers `dolt`. `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
    Tailscale is resolved: dolt also publishes `100.66.84.41:3307` for grokbot-box (`tag:grokbot`); the tailnet ACL allows that device orcrist tcp 22/445/3307. Tailscale clients connect to `100.66.84.41` and must use TLS server name `dolt.thelances.net` (skip-verify is not allowed); map that name to `100.66.84.41` in `/etc/hosts` only if they should not follow the public CNAME. If `tailscaled` is not up when the container starts, Docker cannot bind that address and dolt does not start. Start dolt after `tailscaled`. No systemd ordering is added.
 4. After the container is up, `./scripts/dolt-add-db.sh <prefix>` for each Beads project, then `bd init --server --external` on the clients. Whether that init succeeds against the pre-created database was not executed here.

@@ -8,9 +8,3 @@ plex/
 slideshow_updater/
 /crowdsec/
 /traefik-logs/
-
-# Dolt sql-server runtime state (configs under dolt/servercfg and dolt/init are tracked)
-/dolt/data/
-/dolt/certs/
-/dolt/backups/
-/dolt/secure-priv/

@@ -36,6 +36,11 @@ volumes:
       type: nfs
       o: addr=192.168.0.6,rw,nfsvers=4.1,async
       device: :/volume1/docker/hydra
+  dolt_config:
+    driver_opts:
+      type: nfs
+      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      device: :/volume1/docker/dolt
   authelia_config:
     driver_opts:
       type: nfs
@@ -432,7 +437,7 @@ services:
     volumes:
       - $LOCALDOCKERDIR/traefik-logs:/traefik-logs # Traefik access log rotation
       - $LOCALDOCKERDIR/acme/acme.json:/acme/acme.json:ro
-      - $LOCALDOCKERDIR/dolt/certs:/dolt-certs
+      - dolt_config:/dolt-config
     environment:
       - TZ=$TZ
       - DOCKER_HOST=tcp://socket-proxy:2375
@@ -441,12 +446,14 @@ services:
 
   # Dolt sql-server for Beads (bd). MySQL protocol, not HTTP: no Traefik labels, no Authelia.
   # Published on the LAN address and on orcrist's Tailscale address. Clients connect as dolt.thelances.net:3307.
-  # Data is local disk. The Synology drops NFSv4 locks; do not move this to a NAS volume.
+  # Config (servercfg, init, entrypoint, certs, backups) is the NFS volume, copied from dolt/ in this repo to /mnt/docker/dolt.
+  # Only the database is local: nested bind /usr/local/dolt/data, same pattern as hydra's H2 database.
+  # secure_file_priv is an empty tmpfs at /secure-priv (nothing to persist).
   dolt:
     container_name: dolt
     image: dolthub/dolt-sql-server:2.6.1
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "/usr/local/bin/dolt-entrypoint.sh"]
+    entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
     networks:
       - default
     security_opt:
@@ -456,13 +463,10 @@ services:
       # grokbot-box (tag:grokbot). The tailnet ACL limits that device to orcrist tcp 22/445/3307.
       - "100.66.84.41:3307:3306"
     volumes:
-      - $LOCALDOCKERDIR/dolt/data:/var/lib/dolt
-      - $LOCALDOCKERDIR/dolt/servercfg:/etc/dolt/servercfg.d:ro
-      - $LOCALDOCKERDIR/dolt/certs:/certs:ro
-      - $LOCALDOCKERDIR/dolt/init:/docker-entrypoint-initdb.d:ro
-      - $LOCALDOCKERDIR/dolt/backups:/backups
-      - $LOCALDOCKERDIR/dolt/secure-priv:/secure-priv
-      - $LOCALDOCKERDIR/dolt/entrypoint.sh:/usr/local/bin/dolt-entrypoint.sh:ro
+      - dolt_config:/config
+      - /usr/local/dolt/data:/config/data
+    tmpfs:
+      - /secure-priv
     secrets:
       - dolt_beads_password
     healthcheck:
