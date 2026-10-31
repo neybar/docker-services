@@ -2,12 +2,15 @@
 #
 # Dolt (Beads) Validation Script
 # Validates the Dolt sql-server: healthy, TLS-only with a certificate that verifies for dolt.<domain>
-# on both published addresses, beads can log in, remote root cannot, and init did not rerun.
+# on both published addresses, beads can log in, remote root cannot, init did not rerun, and the live
+# config on the NAS matches the templates in dolt/.
 #
 # Usage: ./scripts/validate-dolt.sh [domain]
 # If domain is not provided, reads from .env file
 #
 # Notes:
+#   - HOST_IP and TAILSCALE_IP are derived from the host (scripts/lib/host-addrs.sh), not read from .env.
+#   - The NAS check only reads /mnt/docker/dolt (DOLT_NAS_DIR); it never copies.
 #   - Run on this host. The MySQL client is the pinned image MYSQL_IMAGE, run with
 #     `docker run --rm --network host` (pulled on first use); nothing is installed on the host.
 #   - dolt.<domain> is mapped to each address in the client container (--add-host), so the
@@ -25,6 +28,8 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # shellcheck source=lib/validate-common.sh
 source "$SCRIPT_DIR/lib/validate-common.sh"
+# shellcheck source=lib/dolt-nas.sh
+source "$SCRIPT_DIR/lib/dolt-nas.sh"
 
 load_env "$@"
 print_banner "Dolt (Beads) Validation Script"
@@ -36,7 +41,6 @@ CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 cd "$PROJECT_DIR" || exit 1
 
-TAILSCALE_IP=$(grep -E '^TAILSCALE_IP=' .env 2>/dev/null | cut -d'=' -f2)
 BEADS_PASSWORD=$(grep -E '^DOLT_BEADS_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2-)
 
 # mysql_query <ip> <ssl-mode> <user> <password, may be empty> <sql>
@@ -75,11 +79,9 @@ else
     print_result "dolt running and healthy" "FAIL" "state='${state:-none}' health='${health:-none}'"
 fi
 
-for tool in docker openssl; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        print_result "$tool available" "FAIL" "$tool is not installed"
-    fi
-done
+if ! command -v docker >/dev/null 2>&1; then
+    print_result "docker available" "FAIL" "docker is not installed"
+fi
 if [[ ! -r "$CA_BUNDLE" ]]; then
     print_result "CA bundle readable" "FAIL" "$CA_BUNDLE not readable (Ubuntu ca-certificates)"
 fi
@@ -106,34 +108,48 @@ else
     print_result "Init did not run on this boot" "PASS"
 fi
 
-# 3./4. Same checks on each published address
-section=3
-for target in "LAN:${HOST_IP:-}" "Tailscale:${TAILSCALE_IP}"; do
+echo ""
+echo -e "${BLUE}3. Testing NAS config${NC}"
+echo ""
+
+# Read-only comparison; deploy.sh runs the same check and refuses to deploy on drift
+if drift=$(dolt_nas_drift "$PROJECT_DIR"); then
+    print_result "NAS config matches dolt/ templates (${DOLT_NAS_FILES[*]})" "PASS"
+else
+    print_result "NAS config matches dolt/ templates (${DOLT_NAS_FILES[*]})" "FAIL" "Live config drifted from the repo:"
+    echo -e "${RED}${drift}${NC}"
+fi
+
+# 4./5. Same checks on each published address
+section=4
+for target in "LAN:${HOST_IP}" "Tailscale:${TAILSCALE_IP}"; do
     label=${target%%:*}
     ip=${target#*:}
-
-    echo ""
-    echo -e "${BLUE}${section}. Testing ${label} (${ip:-unset}:${DOLT_PORT})${NC}"
-    echo ""
-    section=$((section + 1))
-
-    if [[ -z "$ip" ]]; then
-        print_result "${label} address set in .env" "FAIL" "Set HOST_IP and TAILSCALE_IP in .env"
+    if [[ "$label" == Tailscale && "${TAILSCALE_UP:-1}" != 1 ]]; then
+        echo ""
+        print_result "Tailscale address (tailscaled unavailable; Dolt is LAN-only until the next deploy)" "WARN"
+        section=$((section + 1))
         continue
     fi
 
-    # Chain and hostname verification against the system CA bundle
-    tls_out=$(timeout 15 openssl s_client -starttls mysql -connect "${ip}:${DOLT_PORT}" \
-        -servername "$DOLT_HOST" -verify_hostname "$DOLT_HOST" -verify_return_error \
-        -CAfile "$CA_BUNDLE" </dev/null 2>&1)
-    tls_rc=$?
-    if [[ $tls_rc -eq 0 ]] && grep -q 'Verify return code: 0 (ok)' <<<"$tls_out"; then
+    echo ""
+    echo -e "${BLUE}${section}. Testing ${label} (${ip}:${DOLT_PORT})${NC}"
+    echo ""
+    section=$((section + 1))
+
+    # Chain and hostname verification against the system CA bundle, by the MySQL client with VERIFY_IDENTITY and a
+    # non-existent user (no password sent). "Access denied" (1045) is only reached after the TLS handshake verified;
+    # a bad chain or name fails earlier with 2026 "SSL connection error". Not openssl s_client -starttls mysql: against
+    # Dolt it never handshakes ("MySQL packet too short", "no peer certificate available", exit 1), yet still prints
+    # "Verify return code: 0 (ok)", so that line proves nothing.
+    out=$(mysql_query "$ip" VERIFY_IDENTITY validate-dolt-tls "" "SELECT 1;")
+    rc=$?
+    if [[ $rc -ne 0 ]] && grep -q 'ERROR 1045' <<<"$out"; then
         print_result "TLS certificate verifies for ${DOLT_HOST}" "PASS"
-        expiry=$(openssl x509 -noout -enddate <<<"$tls_out" 2>/dev/null | cut -d'=' -f2)
-        [[ -n "$expiry" ]] && echo -e "         Expires: ${expiry}"
+    elif [[ $rc -eq 0 ]]; then
+        print_result "TLS certificate verifies for ${DOLT_HOST}" "FAIL" "validate-dolt-tls logged in: check mysql.user"
     else
-        print_result "TLS certificate verifies for ${DOLT_HOST}" "FAIL" \
-            "$(grep -m1 -iE 'verify (error|return code)|error|refused' <<<"$tls_out" || echo "openssl exit $tls_rc")"
+        print_result "TLS certificate verifies for ${DOLT_HOST}" "FAIL" "$(first_error "$out")"
     fi
 
     # Non-existent user and no password: nothing secret is sent in the clear

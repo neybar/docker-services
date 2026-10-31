@@ -41,13 +41,13 @@ and rsync to Synology NAS every 4 hours.
 
 ## Step 4: Migration Execution (requires downtime)
 
-- [ ] `docker compose down`
+- [ ] `./scripts/compose.sh down`
 - [ ] Create local directories under `$LOCALDOCKERDIR`
 - [ ] Set ownership: `chown -R $PUID:$PGID $LOCALDOCKERDIR/`
 - [ ] Run migration script (rsync NFS → local, ~85 GB)
 - [ ] Deploy updated docker-compose.yml
 - [ ] Remove old Docker named volumes
-- [ ] `docker compose up -d`
+- [ ] `./scripts/compose.sh up -d`
 - [ ] Verify each service has data intact
 - [ ] Install host cron job for backup script
 

@@ -2,9 +2,12 @@
 #
 # Shared helpers for scripts/validate-*.sh. Source it, do not run it.
 #
-# Caller contract: set PROJECT_DIR before calling load_env, then call load_env "$@" (sets DOMAIN, HOST_IP),
-# print_banner "<title>", and finish with print_summary. Provides colors, the PASSED/FAILED/WARNINGS
+# Caller contract: set PROJECT_DIR before calling load_env, then call load_env "$@" (sets DOMAIN, exports HOST_IP and
+# TAILSCALE_IP), print_banner "<title>", and finish with print_summary. Provides colors, the PASSED/FAILED/WARNINGS
 # counters, print_result and the curl_resolved/curl_status helpers. The caller keeps its own `set -uo pipefail`.
+
+# shellcheck source=host-addrs.sh
+source "$(dirname "${BASH_SOURCE[0]}")/host-addrs.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,16 +39,14 @@ load_env() {
         exit 1
     fi
 
-    # Load HOST_IP for local resolution (bypasses public DNS, enables Authelia local bypass)
-    if [[ -f "$PROJECT_DIR/.env" ]]; then
-        HOST_IP=$(grep -E "^HOST_IP=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
+    # HOST_IP and TAILSCALE_IP are derived from the host, as for every compose run (host-addrs.sh); `docker compose`
+    # in the validate scripts needs both. HOST_IP is also used for local resolution (bypasses public DNS, enables
+    # Authelia local bypass).
+    if ! host_addrs_export "$PROJECT_DIR"; then
+        echo -e "${RED}Error: cannot derive HOST_IP (above)${NC}"
+        exit 1
     fi
-
-    if [[ -z "${HOST_IP:-}" ]]; then
-        echo -e "${YELLOW}Warning: HOST_IP not set, using public DNS (may trigger Authelia auth)${NC}"
-    else
-        echo -e "${GREEN}Using local resolution: ${HOST_IP}${NC}"
-    fi
+    echo -e "${GREEN}Using local resolution: ${HOST_IP} (Tailscale ${TAILSCALE_IP})${NC}"
 }
 
 # curl against <host>:<port>, pointing the connection at HOST_IP when set (local resolution) and ignoring TLS

@@ -16,6 +16,11 @@ log() {
     echo "[$(date)] dolt-prebackup: $*" >&2
 }
 
+# Compose needs HOST_IP and TAILSCALE_IP, derived from the host (not in .env)
+# shellcheck source=lib/host-addrs.sh
+source scripts/lib/host-addrs.sh
+host_addrs_export "$PWD" || { log "cannot derive HOST_IP/TAILSCALE_IP"; exit 1; }
+
 dolt_exec() {
     docker compose exec -T "$@"
 }

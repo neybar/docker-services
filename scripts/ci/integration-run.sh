@@ -54,6 +54,11 @@ ln -s "$DEPLOY_DIR/.env" "$work/.env"
 COMPOSE_PROJECT_NAME=$(basename "$DEPLOY_DIR")
 export COMPOSE_PROJECT_NAME
 
+# HOST_IP and TAILSCALE_IP are not in .env: derive them like deploy.sh, with master's helper (this checkout, not the PR's).
+# shellcheck source=../lib/host-addrs.sh
+source "$(dirname "$(readlink -f "$0")")/../lib/host-addrs.sh"
+host_addrs_export "$DEPLOY_DIR" || die "cannot derive HOST_IP/TAILSCALE_IP (above)"
+
 # deploy.yml holds the same lock (flock on the deploy directory) around deploy.sh: never test while a deploy changes the stack.
 exec 9<"$DEPLOY_DIR"
 echo "==> Waiting for the deploy lock on $DEPLOY_DIR"

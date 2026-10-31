@@ -54,7 +54,8 @@ Key variables:
 - `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
 - `CROWDSEC_BOUNCER_KEY` — Traefik/CrowdSec bouncer key (`openssl rand -hex 32`)
 - `DOLT_BEADS_PASSWORD` — Beads SQL password (`openssl rand -hex 32`, hex only). Compose secret, not a container env var
-- `HOST_IP`, `TAILSCALE_IP` — host LAN and Tailscale addresses; Dolt publishes `:3307` on both
+- Not in `.env`: `HOST_IP`, `TAILSCALE_IP` (host LAN and Tailscale addresses; Dolt publishes `:3307` on both) are
+  derived from the host at every compose run by `scripts/lib/host-addrs.sh` (see `REBUILD.md` §7, Host addresses)
 
 #### Cloudflare DNS token (`CLOUDFLARE_DNS_API_TOKEN`)
 
@@ -80,7 +81,7 @@ curl -s -H "Authorization: Bearer $T" https://api.cloudflare.com/client/v4/zones
 
 Compose refuses to start if the variable is empty. The token reaches Traefik as the compose secret
 `cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`), not as an env var. A bad token does not show up at startup,
-only as a failed renewal in `docker compose logs traefik`.
+only as a failed renewal in `./scripts/compose.sh logs traefik`.
 
 ### 2. Docker Networks
 
@@ -113,8 +114,11 @@ After first start: Settings → Environments → Add Environment → Docker → 
 ### 6. Start Everything
 
 ```bash
-docker compose up -d
+./scripts/compose.sh up -d
 ```
+
+Use `./scripts/compose.sh` instead of `docker compose` for every compose command: it derives `HOST_IP` and
+`TAILSCALE_IP` from the host first, and compose refuses to run without them.
 
 ## Maintenance
 
