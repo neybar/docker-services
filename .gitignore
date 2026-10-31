@@ -8,3 +8,7 @@ plex/
 slideshow_updater/
 /crowdsec/
 /traefik-logs/
+# Leftovers from the first Dolt layout (root-owned; certs/ holds the wildcard private key)
+/dolt/certs/
+/dolt/secure-priv/
+/dolt/backups/

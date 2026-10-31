@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Create one Beads project database and grant `beads` on that database only.
 # Run on orcrist from this repo, after the dolt container is up:
 #   ./scripts/dolt-add-db.sh <prefix>
@@ -10,15 +10,17 @@
 # it so beads does not need a global CREATE grant. Whether `bd init --external`
 # then finishes against that pre-created database was not run here (no bd binary).
 
-set -eu
+set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
+cd "$(dirname "$(dirname "$(readlink -f "$0")")")"
+
+if [[ $# -ne 1 ]]; then
     echo "usage: $0 <prefix>" >&2
     exit 1
 fi
 
 name=$1
-if ! printf '%s' "$name" | grep -Eq '^[A-Za-z_][A-Za-z0-9_-]{0,63}$'; then
+if ! [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,63}$ ]]; then
     echo "invalid database name: $name" >&2
     echo "use a letter or underscore, then letters, digits, underscore, or hyphen (max 64)" >&2
     exit 1
@@ -38,5 +40,5 @@ for host in '192.168.0.%' '100.%'; do
     sql="${sql} GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, EXECUTE ON \`$name\`.* TO 'beads'@'${host}';"
 done
 
-docker exec dolt dolt sql -q "$sql"
+docker compose exec -T dolt dolt sql -q "$sql"
 echo "database ${name} granted to beads@192.168.0.% and beads@100.%"

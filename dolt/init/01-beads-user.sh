@@ -8,9 +8,10 @@
 # no password by default. So this script only creates the account. Per-project
 # grants are applied by scripts/dolt-add-db.sh.
 #
-# Runs once, from the image entrypoint, when /var/lib/dolt/.init_completed is
-# absent. To pick up a new secret without wiping data:
-#   docker exec dolt /docker-entrypoint-initdb.d/01-beads-user.sh
+# Template: the live copy is init/ on the NAS volume dolt_config, mounted at
+# /docker-entrypoint-initdb.d. Runs once, from the image entrypoint, when
+# /var/lib/dolt/.init_completed is absent. To pick up a new secret without wiping data:
+#   docker compose exec -T dolt /docker-entrypoint-initdb.d/01-beads-user.sh
 # Password must be a single hex token (openssl rand -hex 32): it is interpolated
 # into SQL, so quotes, backslashes, and whitespace are rejected.
 
