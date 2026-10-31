@@ -42,6 +42,10 @@ jobs:
       - name: Test integration-plan.sh
         run: ./scripts/ci/test-integration-plan.sh
 
+      # Compose NVMe mounts vs scripts/lib/nvme-paths.sh, and the deploy guard and migrate script on fake trees.
+      - name: Test nvme-paths.sh
+        run: ./scripts/ci/test-nvme-paths.sh
+
   docker-compose:
     name: Docker Compose Validation
     runs-on: ubuntu-latest

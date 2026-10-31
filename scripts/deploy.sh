@@ -10,7 +10,8 @@
 # Fast-forwards the checkout and runs `docker compose up -d --build --remove-orphans`, then restarts traefik
 # if traefik-rules/ changed since it started (Traefik does not watch it).
 # Before touching containers: derives HOST_IP/TAILSCALE_IP (scripts/lib/host-addrs.sh) and refuses to deploy if
-# Dolt's live config on the NAS differs from the templates in dolt/ (scripts/lib/dolt-nas.sh).
+# Dolt's live config on the NAS differs from the templates in dolt/ (scripts/lib/dolt-nas.sh), or if NVMe data is still
+# at a legacy path that compose no longer mounts (scripts/lib/nvme-paths.sh).
 # Never pulls images (upgrades are a deliberate, separate step) and never resets on failure.
 # See docs/DEPLOY.md.
 
@@ -69,6 +70,15 @@ source scripts/lib/dolt-nas.sh
 if ! drift=$(dolt_nas_drift "$DEPLOY_DIR"); then
     echo "$drift" >&2
     die "Dolt NAS config differs from the templates in dolt/ (above); nothing was deployed ($DEPLOY_DIR is at ${new:0:7}). Copy, then rerun ./scripts/deploy.sh"
+fi
+
+# Compose creates a missing bind-mount source empty, so a service whose data is still at its legacy path would start
+# fresh (Plex with an empty library). scripts/lib/nvme-paths.sh holds the table.
+# shellcheck source=lib/nvme-paths.sh
+source scripts/lib/nvme-paths.sh
+if ! layout=$(nvme_layout_check "$DEPLOY_DIR"); then
+    echo "$layout" >&2
+    die "NVMe data is still at its legacy path (above); nothing was deployed ($DEPLOY_DIR is at ${new:0:7}). Migrate, then rerun ./scripts/deploy.sh"
 fi
 
 on_exit() {

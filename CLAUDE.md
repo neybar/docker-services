@@ -26,15 +26,24 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 
 ### Storage
 - **NFS volumes** (Synology at 192.168.0.6): Service configs and media libraries
-- **Local NVME** (`/usr/local/plex`, `/tmp/plex_transcode`): Plex config and transcode scratch.
-  `/usr/local/plex` holds the 13GB Plex library database and is **in no backup** — a rebuild
-  silently starts Plex with an empty library. See `REBUILD.md` §5-6.
+- **Local NVMe (`$NVME_DIR`)**: every service that needs orcrist's NVMe, at `$NVME_DIR/<service>/<role>`.
+  `NVME_DIR` defaults to `/usr/local/docker` in compose (`${NVME_DIR:-/usr/local/docker}`, optional in `.env`); it is on
+  `/`, the NVMe. It is **not** `LOCALDOCKERDIR` (the repo checkout, on the /home SATA SSD). The list is the table in
+  `scripts/lib/nvme-paths.sh`, which `scripts/ci/test-nvme-paths.sh` checks against compose:
+  - **Plex** `plex/config` (`/config`): the 13GB library database, **in no backup** — a rebuild silently starts Plex
+    with an empty library (`REBUILD.md` §5-6). `plex/transcode` (`/transcode`): scratch, for transcode speed.
+  - **NZBHydra2** `nzbhydra2/database` (`/config/database`, nested inside the NFS `/config`): the H2 database.
+    Embedded random-access databases must not live on NFS (see Notes).
+  - **Dolt** `dolt/data` (`/var/lib/dolt`, the image's own path): every Beads database. Losing it loses them until
+    restored from `/mnt/docker/dolt/backups`.
+
+  The paths moved from `/usr/local/plex`, `/tmp/plex_transcode`, `/usr/local/nzbhydra2/database` and
+  `/usr/local/dolt/data`. `scripts/migrate-nvme-layout.sh` moves them (dry run by default; `sudo … --apply`) and leaves
+  a symlink at each legacy path. `deploy.sh` refuses to deploy while a legacy path still holds real data and its
+  `$NVME_DIR` path is missing or empty (`nvme_layout_check`), because compose would create it empty.
 - **Local disk** (`$LOCALDOCKERDIR/crowdsec/{config,data}`, `$LOCALDOCKERDIR/traefik-logs`): CrowdSec config + SQLite DB
   and Traefik's access log. Gitignored. Regenerable — losing it loses only decisions/alerts history.
 - **NFS** `dolt_config` (`:/volume1/docker/dolt`, CIFS on the host at `/mnt/docker/dolt`): Dolt's `servercfg/`, `init/`, `certs/` and `backups/`, each mounted by subpath. `dolt/` in the repo holds only templates (see the Dolt note).
-- **Local NVMe** `/usr/local/dolt/data`: Dolt's database, at the image's own `/var/lib/dolt`. Losing it loses every Beads database until restored from `/mnt/docker/dolt/backups`.
-- **Local NVME** (`/usr/local/nzbhydra2/database`): NZBHydra2's H2 database — mounted at `/config/database`,
-  nested inside the NFS `/config`. Embedded random-access databases must not live on NFS (see Notes).
 
 ### Services
 
@@ -66,6 +75,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 - `scripts/lib/validate-common.sh` — helpers shared by the validate scripts (colors, `.env` loading, counters, `print_result`); `.shellcheckrc` lets ShellCheck follow the `source`
 - `scripts/compose.sh` — `docker compose` wrapper for use by hand; derives `HOST_IP`/`TAILSCALE_IP` via `scripts/lib/host-addrs.sh` (see Environment Variables)
 - `scripts/lib/dolt-nas.sh` — read-only comparison of Dolt's live NAS config with the `dolt/` templates (used by `deploy.sh` and `validate-dolt.sh`)
+- `scripts/lib/nvme-paths.sh` — the table of local NVMe paths (`$NVME_DIR/<service>/<role>`, see Storage) and `deploy.sh`'s guard; `scripts/migrate-nvme-layout.sh` moves the legacy paths into it
 - `acme/acme.json` — Let's Encrypt certs (Traefik-managed, chmod 600)
 - `dolt/` — **templates** for the Dolt server YAML and the beads-user init script (the live copies are on the NAS), plus `RESTORE.md` (restore procedure)
 - `scripts/dolt-add-db.sh` — create one Beads database and grant `beads` on it (no global grants)
@@ -81,6 +91,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 | `CLOUDFLARE_ZONEID` | Zone ID (not referenced by compose) |
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
 | `LOCALDOCKERDIR` | Local storage path (`/home/jalance/Projects/docker-services`, on the 1TB TeamGroup SATA SSD that replaced the failed 870 EVO on 2026-10-17). See `REBUILD.md` §5 |
+| `NVME_DIR` | Optional. Parent of the local NVMe paths (default `/usr/local/docker`, see Storage). Not `LOCALDOCKERDIR` |
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `CROWDSEC_BOUNCER_KEY` | Traefik-to-CrowdSec bouncer key (`openssl rand -hex 32`); passed to both CrowdSec (registers it as bouncer `traefik`) and Traefik as the compose secret `crowdsec_bouncer_key` |
 | `HOST_IP` | **Not in `.env`: derived at every compose run** by `scripts/lib/host-addrs.sh` (source address of the main table's IPv4 default route; exactly one default route required). Host LAN IP: local resolution in the validate scripts, and the only address Pi-hole binds :53 and Dolt :3307 on (required by compose) |
@@ -97,7 +108,9 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 2. Connect to `t2_proxy` network
 3. Add Traefik labels: `traefik.http.routers.<name>.rule=Host(\`<name>.$DOMAINNAME\`)`
 4. Use `chain-authelia@file` middleware. `chain-authelia`, `chain-no-auth` and `chain-basic-auth` all start with `crowdsec@file`, so a new service gets the WAF automatically. Never attach a router without one of these chains — it would bypass CrowdSec.
-5. Add NFS volume if config persistence needed (follow existing pattern, Synology at 192.168.0.6)
+5. Add NFS volume if config persistence needed (follow existing pattern, Synology at 192.168.0.6).
+   If it needs the local NVMe instead (an embedded database, or speed), mount `${NVME_DIR:-/usr/local/docker}/<service>/<role>`
+   and add a row to `NVME_PATHS` in `scripts/lib/nvme-paths.sh` (`./scripts/ci/test-nvme-paths.sh` fails until both agree)
 6. Add subdomain to `SERVICES` array in `scripts/validate-traefik.sh`
 7. Run `./scripts/validate-traefik.sh`
 
@@ -142,7 +155,7 @@ every required `${VAR:?}` in compose. A new required variable needs a dummy valu
 - **Plex**: LinuxServer.io image with `/dev/dri` GPU transcoding; `VERSION=public` enables auto-updates on container restart
 - **Task Scheduler**: Docker cleanup nightly at midnight; Plex restart Sundays at 3 AM
 - **Kometa**: Runs daily at 1 AM; reads `PLEX_TOKEN` and `TMDB_API_READ_ACCESS_TOKEN` from env; config at `/mnt/docker/kometa/config.yml`
-- **NZBHydra2 (hydra)**: H2 database lives on local NVME at `/usr/local/nzbhydra2/database`, *not* NFS.
+- **NZBHydra2 (hydra)**: H2 database lives on local NVMe at `$NVME_DIR/nzbhydra2/database`, *not* NFS.
   The Synology periodically revokes NFSv4 lock state (`NFS: : lost 3 locks` in `dmesg`, ~every 9 days);
   the kernel surfaces that as EIO (`recover_lost_locks` is off by default), and H2 treats any I/O error as
   fatal with no reopen path, so one blip wedges the DB until the container restarts
@@ -199,7 +212,7 @@ every required `${VAR:?}` in compose. A new required variable needs a dummy valu
 - **Dolt** (Beads): `dolthub/dolt-sql-server:2.6.1`, MySQL protocol, TLS required, no Traefik/Authelia. Publishes `:3307` on `$HOST_IP` and `$TAILSCALE_IP`, never `0.0.0.0`; the tailnet ACL decides which tailnet devices reach it (grokbot-box, `tag:grokbot`: orcrist tcp 22/445/3307). If `tailscaled` is down when the container starts (e.g. at boot), Docker cannot bind `$TAILSCALE_IP` and dolt does not start; nothing orders the two. Compose runs (deploys included) never fail on Tailscale: while it is down the helper binds `127.0.0.1` instead and warns, so a deploy brings dolt back LAN-only, and the next deploy after `tailscaled` returns restores the tailnet address.
   Clients use `dolt.<domain>`: a DNS-only CNAME to `orcrist.<domain>` (A `$HOST_IP`), covered by the `*.<domain>` wildcard. It may be repointed, so clients never hardcode `orcrist`. Tailscale clients connect to `$TAILSCALE_IP` with TLS server name `dolt.<domain>` (an `/etc/hosts` entry), never skip-verify.
   - **Config stays on the NAS, not in git.** `servercfg/`, `init/`, `certs/` and `backups/` on `dolt_config` (`/mnt/docker/dolt`). Compose mounts each one by volume `subpath` at the path the image reads: `/etc/dolt/servercfg.d`, `/docker-entrypoint-initdb.d` and `/certs` read-only, and `/backups`. `dolt/` in this repo holds **templates** only, copied by hand like `kometa/config.yml.example`, because the repo is public and live config can be identifying. A merged template change does not deploy: copy it to the NAS, then `./scripts/compose.sh restart dolt`. Drift cannot pass silently: `deploy.sh` refuses to deploy (before touching any container) and `validate-dolt.sh` fails while `servercfg/config.yaml` or `init/01-beads-user.sh` on the NAS differs from its template, and both print the `diff`/`cp` commands (`scripts/lib/dolt-nas.sh`, read-only). A PR that changes a template therefore fails its `dolt` integration check, and its merge deploy, until the NAS copy is updated.
-  - **Data**: `/usr/local/dolt/data` → `/var/lib/dolt`. That is the image's `VOLUME`, and its entrypoint hardcodes `/var/lib/dolt/.init_completed`. A hydra-style nested `data_dir` made every start look like a first run. Init (`01-beads-user.sh`) runs only while that marker is missing.
+  - **Data**: `$NVME_DIR/dolt/data` → `/var/lib/dolt`. That is the image's `VOLUME`, and its entrypoint hardcodes `/var/lib/dolt/.init_completed`. A hydra-style nested `data_dir` made every start look like a first run. Init (`01-beads-user.sh`) runs only while that marker is missing.
   - **Entrypoint guard** (inline in compose, then `exec tini -- docker-entrypoint.sh`). Whenever `servercfg.d` does not hold exactly one `*.yaml`, the image starts on its defaults: plaintext on `0.0.0.0`, with the existing users. The guard refuses to start unless these exist: `config.yaml` with `require_secure_transport: true`, both PEMs, and, on a first start, the init script.
   - **Certs**: `dolt-certs.sh` (task-scheduler, at its start and daily at 00:20) dumps the wildcard from `acme.json` into `certs/` and restarts dolt only when the cert changed. The restart is `POST /containers/dolt/restart`: `CONTAINERS=1` and `POST=1` allow it, `EXEC` is off.
   - **Privileges**: the users are `beads@'192.168.0.%'` and `beads@'100.%'`. MySQL host patterns cannot express Tailscale's `100.64.0.0/10`, so `100.%` is wider. `beads` has no `*.*` grants: Dolt 2.6.1 ignores database-name wildcards, and a global grant can `UPDATE mysql.user` and move `root` off localhost (verified). `./scripts/dolt-add-db.sh <prefix>` creates one database and grants it. `bd init --external` against that pre-created database is UNVERIFIED. `secure_file_priv=/secure-priv` (empty tmpfs), because otherwise `LOAD_FILE` can read the secret.

@@ -30,6 +30,8 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/lib/validate-common.sh"
 # shellcheck source=lib/dolt-nas.sh
 source "$SCRIPT_DIR/lib/dolt-nas.sh"
+# shellcheck source=lib/nvme-paths.sh
+source "$SCRIPT_DIR/lib/nvme-paths.sh"
 
 load_env "$@"
 print_banner "Dolt (Beads) Validation Script"
@@ -103,7 +105,7 @@ started=""
 if [[ -z "$started" ]]; then
     print_result "Init did not run on this boot" "FAIL" "No dolt container"
 elif docker compose logs --no-log-prefix --since "$started" dolt 2>&1 | grep -q '/docker-entrypoint-initdb.d/'; then
-    print_result "Init did not run on this boot" "FAIL" "Init ran: expected only on the first start of an empty /usr/local/dolt/data"
+    print_result "Init did not run on this boot" "FAIL" "Init ran: expected only on the first start of an empty $(nvme_target_path "$PROJECT_DIR" dolt data)"
 else
     print_result "Init did not run on this boot" "PASS"
 fi
