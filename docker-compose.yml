@@ -447,7 +447,8 @@ services:
   # Dolt sql-server for Beads (bd). MySQL protocol, not HTTP: no Traefik labels, no Authelia.
   # Published on the LAN address and on orcrist's Tailscale address. Clients connect as dolt.thelances.net:3307.
   # Config (servercfg, init, entrypoint, certs, backups) is the NFS volume, copied from dolt/ in this repo to /mnt/docker/dolt.
-  # Only the database is local: nested bind /usr/local/dolt/data, same pattern as hydra's H2 database.
+  # Only the database is local: NVMe bind at /var/lib/dolt (/usr/local/dolt/data), the hydra-style exception.
+  # Not nested under /config. The image entrypoint hardcodes /var/lib/dolt for .init_completed.
   # secure_file_priv is an empty tmpfs at /secure-priv (nothing to persist).
   dolt:
     container_name: dolt
@@ -464,7 +465,7 @@ services:
       - "100.66.84.41:3307:3306"
     volumes:
       - dolt_config:/config
-      - /usr/local/dolt/data:/config/data
+      - /usr/local/dolt/data:/var/lib/dolt
     tmpfs:
       - /secure-priv
     secrets:

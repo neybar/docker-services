@@ -2,7 +2,7 @@
 
 MySQL-protocol server for [Beads](https://github.com/gastownhall/beads) (`bd` v1.3.x). Not HTTP: no Traefik router, no Authelia. Published on `192.168.0.3:3307` and `100.66.84.41:3307` (orcrist's Tailscale address). Clients use `dolt.thelances.net`, the same way as every other service (`BEADS_DOLT_SERVER_TLS=1` sets the MySQL driver's `tls=true`, which verifies the certificate and the hostname). `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
 
-Config is the NFS volume `dolt_config` (`:/volume1/docker/dolt`), the same share as `/mnt/docker/dolt` on orcrist. The database is `/usr/local/dolt/data`, nested at `/config/data`, because Dolt cannot live on NFSv4 (lock revocation, same as NZBHydra2's H2 database). `scripts/dolt-prebackup.sh` overwrites `/config/backups` on that volume. `secure_file_priv` is an empty tmpfs at `/secure-priv`.
+Config is the NFS volume `dolt_config` (`:/volume1/docker/dolt`), the same share as `/mnt/docker/dolt` on orcrist. The database is `/usr/local/dolt/data`, a local NVMe bind at `/var/lib/dolt`, the hydra-style exception (not nested under `/config`). Dolt cannot live on NFSv4 (lock revocation), and the image entrypoint hardcodes `/var/lib/dolt` for `.init_completed`. `scripts/dolt-prebackup.sh` overwrites `/config/backups` on that volume. `secure_file_priv` is an empty tmpfs at `/secure-priv`.
 
 ## What James must do by hand
 
@@ -32,6 +32,9 @@ Do this **before merging**. A merge to `master` deploys, and `docker compose con
    else
      sudo mkdir -p /usr/local/dolt/data
    fi
+   # The stopped container still names the old bind source. Compose recreate
+   # fails with "bind source path does not exist" until that container is gone.
+   docker rm dolt
    ```
 
    If the cert directory is still empty, `dolt-certs.sh` fills it from `acme.json` and restarts dolt. The entrypoint exits until `certificate.crt` and `privatekey.key` are there. It does not start on image defaults.

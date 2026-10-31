@@ -127,7 +127,7 @@ Task Scheduler handles routine maintenance automatically:
 
 ## Dolt (Beads)
 
-Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Checklist, grants, and restore steps: [dolt/RESTORE.md](dolt/RESTORE.md).
+Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. The database is a local NVMe bind at `/var/lib/dolt` (`/usr/local/dolt/data`), the hydra-style exception. Checklist, grants, and restore steps: [dolt/RESTORE.md](dolt/RESTORE.md).
 
 Before merging (deploy refuses to render without the password):
 

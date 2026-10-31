@@ -2,7 +2,8 @@
 # into the NFS config volume (/config/certs). Dolt reads tls_cert and tls_key only at
 # process start (restart after a cert change).
 # Keys are nested under listener (servercfg.ListenerYAMLConfig in Dolt 2.6.1).
-# data_dir is the nested local bind (/usr/local/dolt/data), not the NFS volume.
+# data_dir is /var/lib/dolt, a local NVMe bind (/usr/local/dolt/data), the hydra-style exception.
+# The image entrypoint hardcodes CONTAINER_DATA_DIR=/var/lib/dolt and writes .init_completed there.
 log_level: info
 listener:
   host: 0.0.0.0
@@ -10,7 +11,7 @@ listener:
   tls_key: /config/certs/privatekey.key
   tls_cert: /config/certs/certificate.crt
   require_secure_transport: true
-data_dir: /config/data
+data_dir: /var/lib/dolt
 # Empty secure_file_priv lets any authenticated user LOAD_FILE any path the
 # process can read, including the beads password secret (verified on 2.6.1).
 # /secure-priv is an empty tmpfs, so LOAD_FILE has nowhere useful to read.
