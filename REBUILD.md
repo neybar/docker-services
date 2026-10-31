@@ -22,7 +22,7 @@ Start here, because these are the things a fresh host will not have and
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
-| `tailscaled` before dolt | systemd | **not enforced**: if `tailscaled` is down when dolt starts, Docker cannot bind `$TAILSCALE_IP` and dolt does not start; `docker compose up -d dolt` once it is up |
+| `tailscaled` before dolt | systemd | **not enforced**: if `tailscaled` is down when dolt starts, Docker cannot bind `$TAILSCALE_IP` and dolt does not start; `./scripts/compose.sh up -d dolt` once it is up. While it is down, `TAILSCALE_IP` cannot be derived, so `scripts/compose.sh` and deploys fail loudly |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
 ---
@@ -174,10 +174,10 @@ for this stack and is the natural home for it.
 
 ```bash
 git clone <repo> && cd docker-services
-cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY, DOLT_BEADS_PASSWORD and TAILSCALE_IP, see below)
+cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY and DOLT_BEADS_PASSWORD, see below)
 # restore /usr/local/plex from backup FIRST (see §5)
 touch acme/acme.json && chmod 600 acme/acme.json
-docker compose up -d
+./scripts/compose.sh up -d   # derives HOST_IP and TAILSCALE_IP; never bare `docker compose` (see below)
 ./scripts/validate-traefik.sh
 ./scripts/validate-waf.sh
 ./scripts/validate-dolt.sh
@@ -185,18 +185,32 @@ docker compose up -d
 
 `acme.json` must be `0600` or Traefik refuses to use it.
 
+### Host addresses (`HOST_IP`, `TAILSCALE_IP`)
+
+Not in `.env`. `scripts/lib/host-addrs.sh` derives them at every compose run (`scripts/compose.sh`, `deploy.sh`,
+`scripts/ci/integration-run.sh`, the validate and `dolt-*` scripts), and compose refuses every command without them:
+
+- `HOST_IP`: the `src` of the IPv4 default route in the main routing table (else the first global address on that
+  route's interface). The main table, not `ip route get`, because a Tailscale exit node would route that over
+  `tailscale0`. The host must have exactly one IPv4 default route; with two, it fails instead of guessing. On orcrist the
+  address is a DHCP lease on `enp2s0f0`, so keep it reserved on the gateway: `dolt.<domain>` (via `orcrist.<domain>`)
+  points at it.
+- `TAILSCALE_IP`: `tailscale ip -4`, so `tailscaled` must be up and logged in.
+
+If either cannot be derived, the run fails with the reason. There is no fallback to `0.0.0.0`.
+
 ### Dolt (Beads)
 
-Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `docker compose up`.
+Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `./scripts/compose.sh up -d`.
 
-1. In `.env`, set `DOLT_BEADS_PASSWORD` (`openssl rand -hex 32`, hex only) and `TAILSCALE_IP` (`tailscale ip -4`). `HOST_IP` is already set. Compose refuses to render without them.
+1. In `.env`, set `DOLT_BEADS_PASSWORD` (`openssl rand -hex 32`, hex only). Compose refuses to render without it. `tailscaled` must be up (see Host addresses above).
 2. Stage the NAS config from the templates. Every subpath must exist, because compose mounts each one:
    ```bash
    mkdir -p /mnt/docker/dolt/servercfg /mnt/docker/dolt/init /mnt/docker/dolt/certs /mnt/docker/dolt/backups
    cp dolt/servercfg/config.yaml /mnt/docker/dolt/servercfg/
    cp dolt/init/01-beads-user.sh /mnt/docker/dolt/init/
    ```
-   `servercfg/` must hold exactly one `*.yaml`. `certs/` is filled by `dolt-certs.sh` when task-scheduler starts. Until then, dolt's guard refuses to start, and it restarts on its own once the certs exist.
+   `servercfg/` must hold exactly one `*.yaml`. Keep both files identical to their templates: `deploy.sh` refuses to deploy and `validate-dolt.sh` fails while either differs, and both print the `cp` to run. `certs/` is filled by `dolt-certs.sh` when task-scheduler starts. Until then, dolt's guard refuses to start, and it restarts on its own once the certs exist.
 3. Restore `/usr/local/dolt/data` from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`). Skip this only for a deliberately empty server, where init creates the `beads` users on the first start.
 4. Add the crontab line from §1.
 5. For each new Beads project, run `./scripts/dolt-add-db.sh <prefix>`.
@@ -213,7 +227,7 @@ Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `docker compose up
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
 3. Nothing to create for Traefik's dynamic config: the chains (each starting with `crowdsec@file`), the `middlewares-*`, `crowdsec@file`
    and the Synology/Homebridge routers are all in `traefik-rules/`, mounted read-only at `/rules`. Not watched (it is the git checkout): `deploy.sh`
-   restarts traefik when anything in `traefik-rules/` is newer than its last start; after a hand edit, `docker compose restart traefik`.
+   restarts traefik when anything in `traefik-rules/` is newer than its last start; after a hand edit, `./scripts/compose.sh restart traefik`.
    Traefik no longer uses the NFS `/mnt/docker/traefik3` volume.
 4. A Traefik restart costs ~2s of connection refused, with no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
@@ -222,7 +236,7 @@ Rollback if the WAF misbehaves: revert the PR. The deploy (`up -d --build --remo
 which are kept as the pre-WAF copy (chains without `crowdsec@file`), and removes crowdsec. Keep that NFS directory until the WAF has proven stable; once it is deleted, a revert has no rules to fall back on.
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
-Every chained router returns 403 from the delete until the recreate below (an outage), so run the steps back to back: `docker compose exec crowdsec cscli bouncers delete traefik` (this also deletes every auto-created `traefik@<ip>` entry; CrowdSec refuses to delete those on their own), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
+Every chained router returns 403 from the delete until the recreate below (an outage), so run the steps back to back: `./scripts/compose.sh exec crowdsec cscli bouncers delete traefik` (this also deletes every auto-created `traefik@<ip>` entry; CrowdSec refuses to delete those on their own), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `./scripts/compose.sh up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
 run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 POST/PUT/PATCH/DELETE without Content-Length) are blocked, not passed; GET/HEAD go to AppSec header-only and pass (`crowdsecAppsecUnreadableBodyBlock=true`, the plugin default). A key mismatch is not a silent fail-open: a wrong or unregistered key blocks every chained router with 403 (the LAPI stream fails open, but AppSec answers an unknown key with 401, and the plugin blocks on any AppSec error other than 500/502/503/504/unreachable). `validate-waf.sh` detects it (the normal-page check fails).
 
 Docker access: none. CrowdSec does not read Authelia logs: the only way without a log file was Docker API access, which cannot be scoped below

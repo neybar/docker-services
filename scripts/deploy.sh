@@ -9,6 +9,8 @@
 #
 # Fast-forwards the checkout and runs `docker compose up -d --build --remove-orphans`, then restarts traefik
 # if traefik-rules/ changed since it started (Traefik does not watch it).
+# Before touching containers: derives HOST_IP/TAILSCALE_IP (scripts/lib/host-addrs.sh) and refuses to deploy if
+# Dolt's live config on the NAS differs from the templates in dolt/ (scripts/lib/dolt-nas.sh).
 # Never pulls images (upgrades are a deliberate, separate step) and never resets on failure.
 # See docs/DEPLOY.md.
 
@@ -51,6 +53,23 @@ fi
 git merge --ff-only --quiet "$target" \
     || die "cannot fast-forward $old to $target; local master has diverged, fix by hand"
 new=$(git rev-parse HEAD)
+
+# Preflight, from the new commit's helpers. A failure here changes no container, so it skips the rollback advice:
+# fix the cause and rerun (the checkout is already at the new commit, so the rerun reconciles).
+# HOST_IP and TAILSCALE_IP are derived from the host, not read from .env.
+# shellcheck source=lib/host-addrs.sh
+source scripts/lib/host-addrs.sh
+host_addrs_export "$DEPLOY_DIR" \
+    || die "cannot derive HOST_IP/TAILSCALE_IP (above); nothing was deployed ($DEPLOY_DIR is at ${new:0:7})"
+echo "==> HOST_IP=$HOST_IP TAILSCALE_IP=$TAILSCALE_IP (derived from the host)"
+
+# Dolt's live config on the NAS is copied from dolt/ by hand; deploying against a stale copy has broken Dolt before.
+# shellcheck source=lib/dolt-nas.sh
+source scripts/lib/dolt-nas.sh
+if ! drift=$(dolt_nas_drift "$DEPLOY_DIR"); then
+    echo "$drift" >&2
+    die "Dolt NAS config differs from the templates in dolt/ (above); nothing was deployed ($DEPLOY_DIR is at ${new:0:7}). Copy, then rerun ./scripts/deploy.sh"
+fi
 
 on_exit() {
     local rc=$?

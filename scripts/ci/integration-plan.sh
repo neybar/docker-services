@@ -46,12 +46,14 @@ while IFS= read -r f; do
         # What runs on the runner: label-only, so the owner reads it first.
         .github/*|scripts/ci/*) sensitive="$f" ;;
         docker-compose.yml) want[compose-config]=1 want[traefik]=1 want[waf]=1 ;;
-        env.example|scripts/deploy.sh) want[compose-config]=1 ;;
-        traefik-rules/*|crowdsec-config/*|plugins-local/*|scripts/lib/*) want[traefik]=1 want[waf]=1 ;;
+        env.example|scripts/deploy.sh|scripts/compose.sh) want[compose-config]=1 ;;
+        traefik-rules/*|crowdsec-config/*|plugins-local/*) want[traefik]=1 want[waf]=1 ;;
+        # Shared by every validate script, deploy.sh and scripts/compose.sh (host-addrs.sh)
+        scripts/lib/*) want[compose-config]=1 want[traefik]=1 want[waf]=1 want[dolt]=1 ;;
         scripts/validate-traefik.sh) want[traefik]=1 ;;
         scripts/validate-waf.sh) want[waf]=1 ;;
         task-scheduler/*) want[task-scheduler]=1 ;;
-        dolt/*|scripts/dolt-*) want[dolt]=1 ;;
+        dolt/*|scripts/dolt-*|scripts/validate-dolt.sh) want[dolt]=1 ;;
     esac
 done
 

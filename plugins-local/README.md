@@ -23,5 +23,5 @@ Local Traefik plugins, loaded via Traefik's `experimental.localPlugins` so Traef
 2. Replace the directory contents with that tag's tarball (top-level directory stripped), then apply the same trim
    as above. Check that nothing new outside that list is needed at runtime.
 3. Update this README (tag, commit SHA, vendored date).
-4. Restart Traefik: `docker compose restart traefik` (local plugins are loaded only at start, and `up -d` does not recreate it for a plugin change).
+4. Restart Traefik: `./scripts/compose.sh restart traefik` (local plugins are loaded only at start, and `up -d` does not recreate it for a plugin change).
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`.

@@ -2,7 +2,7 @@
 
 How the service is set up (NAS config, local data, guard, privileges, backup cron): the Dolt note in `CLAUDE.md`. Bring-up on a fresh host: `REBUILD.md` §7.
 
-Run everything from the deploy checkout on orcrist. None of these procedures has been exercised end to end yet.
+Run everything from the deploy checkout on orcrist. None of these procedures has been exercised end to end yet. Compose runs through `./scripts/compose.sh`, which derives `HOST_IP`/`TAILSCALE_IP` (they are not in `.env`).
 
 ## What the backup holds
 
@@ -18,7 +18,7 @@ Run everything from the deploy checkout on orcrist. None of these procedures has
 
 ```bash
 ./scripts/dolt-add-db.sh <prefix>     # empty database + grants, if it is gone
-docker compose exec -T -w /var/lib/dolt/<prefix> dolt dolt sql < /mnt/docker/dolt/backups/sql/<prefix>.sql
+./scripts/compose.sh exec -T -w /var/lib/dolt/<prefix> dolt dolt sql < /mnt/docker/dolt/backups/sql/<prefix>.sql
 ```
 
 This loses history: the dump is the working set only.
@@ -28,7 +28,7 @@ This loses history: the dump is the working set only.
 `backup restore` needs nothing else to have the data directory open, so stop dolt first. The image's entrypoint starts a server, so override it:
 
 ```bash
-docker compose stop dolt
+./scripts/compose.sh stop dolt
 sudo mkdir -p /usr/local/dolt/restore
 docker run --rm --entrypoint dolt -w /restore \
   -v /mnt/docker/dolt/backups/native/<prefix>:/backup:ro \
@@ -36,7 +36,7 @@ docker run --rm --entrypoint dolt -w /restore \
   dolthub/dolt-sql-server:2.6.1 backup restore file:///backup <prefix>
 sudo mv /usr/local/dolt/data/<prefix> /usr/local/dolt/restore/<prefix>.old 2>/dev/null || true
 sudo mv /usr/local/dolt/restore/<prefix> /usr/local/dolt/data/<prefix>
-docker compose up -d dolt
+./scripts/compose.sh up -d dolt
 ./scripts/dolt-add-db.sh <prefix>     # re-grants beads; CREATE DATABASE IF NOT EXISTS is a no-op
 ```
 
@@ -48,10 +48,10 @@ Delete `/usr/local/dolt/restore` once the restored data checks out.
 
 ## Users on an existing data directory
 
-To re-create the `beads` users, or to apply a new `DOLT_BEADS_PASSWORD`, update `.env` and run `docker compose up -d --force-recreate dolt` to remount the secret. Init does not rerun, because `.init_completed` exists. Then:
+To re-create the `beads` users, or to apply a new `DOLT_BEADS_PASSWORD`, update `.env` and run `./scripts/compose.sh up -d --force-recreate dolt` to remount the secret. Init does not rerun, because `.init_completed` exists. Then:
 
 ```bash
-docker compose exec -T dolt /docker-entrypoint-initdb.d/01-beads-user.sh
+./scripts/compose.sh exec -T dolt /docker-entrypoint-initdb.d/01-beads-user.sh
 ```
 
 Finish with `./scripts/validate-dolt.sh`.

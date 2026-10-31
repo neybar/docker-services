@@ -14,6 +14,9 @@ A merge to `master` updates the running stack on orcrist. Nothing else deploys.
    - refuses to run unless the checkout is on `master` with no tracked modifications (untracked files are fine)
    - fetches `master` over HTTPS and fast-forwards (`--ff-only`) to exactly `$GITHUB_SHA`. If HEAD
      already contains that commit (a newer one is deployed), it exits without doing anything.
+   - derives `HOST_IP` and `TAILSCALE_IP` from the host (`scripts/lib/host-addrs.sh`; they are not in `.env`) and
+     refuses to deploy if Dolt's live NAS config differs from `dolt/` (`scripts/lib/dolt-nas.sh`, read-only). Both run
+     before any container is touched, and print what to fix; fix it and rerun `./scripts/deploy.sh`.
    - runs `docker compose config --quiet`, then `docker compose up -d --build --remove-orphans`
    - restarts traefik if anything in `traefik-rules/` is newer than its last start (Traefik does not watch
      that directory, and `up -d` does not recreate traefik when only the rules changed)
@@ -69,6 +72,7 @@ validate scripts against the running services, and the PR's `task-scheduler` ima
 2. If it says run, the `orcrist` job runs master's `scripts/ci/integration-run.sh`:
    - fetches the PR head into a fresh repo under `$RUNNER_TEMP`, never the deploy checkout or a worktree of it
    - symlinks the deploy checkout's `.env` into that repo and sets `COMPOSE_PROJECT_NAME` to the live project
+   - derives `HOST_IP`/`TAILSCALE_IP` with master's `scripts/lib/host-addrs.sh`, as `deploy.sh` does
    - takes `flock` on the deploy directory, the same lock `deploy.yml` holds around `deploy.sh`, so a test
      never overlaps a deploy (wait up to 30 min). A deploy by hand from a shell does not take the lock.
    - runs the checks, then removes the temp repo and the throwaway image. It never runs
@@ -86,14 +90,16 @@ validate scripts against the running services, and the PR's `task-scheduler` ima
 | Changed path | Checks |
 |--------------|--------|
 | `docker-compose.yml` | `compose-config`, `traefik`, `waf` |
-| `env.example`, `scripts/deploy.sh` | `compose-config` |
-| `traefik-rules/**`, `crowdsec-config/**`, `plugins-local/**`, `scripts/lib/**` | `traefik`, `waf` |
+| `env.example`, `scripts/deploy.sh`, `scripts/compose.sh` | `compose-config` |
+| `traefik-rules/**`, `crowdsec-config/**`, `plugins-local/**` | `traefik`, `waf` |
+| `scripts/lib/**` | `compose-config`, `traefik`, `waf`, `dolt` |
 | `scripts/validate-traefik.sh` / `scripts/validate-waf.sh` | `traefik` / `waf` |
 | `task-scheduler/**` | `task-scheduler` (`docker build` under a throwaway tag) |
-| `dolt/**`, `scripts/dolt-*` | `dolt`: `scripts/validate-dolt.sh` if the PR has it, else a notice |
+| `dolt/**`, `scripts/dolt-*`, `scripts/validate-dolt.sh` | `dolt`: `scripts/validate-dolt.sh` if the PR has it, else a notice |
 
 `traefik` and `waf` are `scripts/validate-traefik.sh` and `scripts/validate-waf.sh`; they fail on
-anything that fails on the live stack, whether or not the PR caused it.
+anything that fails on the live stack, whether or not the PR caused it. `dolt` compares the PR's `dolt/` templates
+with the live NAS copies, so a PR that changes a template fails it until the NAS copy is updated.
 
 Why `pull_request_target`: it runs the workflow file and `scripts/ci/` from `master`, so a PR cannot
 edit the gate or the runner steps. (`pull_request` would run the PR's copy of the workflow, which could
@@ -164,8 +170,9 @@ git push -u origin HEAD && gh pr create
 **Emergency, by hand** (only tracked files are touched; `.env` and data are untracked):
 ```bash
 cd /home/jalance/Projects/docker-services
+source scripts/lib/host-addrs.sh && host_addrs_export   # before the reset: <previous-good-sha> may predate the helper
 git reset --hard <previous-good-sha>
-docker compose up -d --build --remove-orphans
+docker compose up -d --build --remove-orphans   # bare compose is fine here: this shell exported HOST_IP/TAILSCALE_IP
 docker compose restart traefik   # if traefik-rules/ changed: Traefik does not watch it, and up -d does not reload it
 ```
 Then still revert on `master`. Otherwise the next deploy fast-forwards straight back to the bad
@@ -176,9 +183,11 @@ commit. Because your local `master` is behind `origin/master`, that fast-forward
 Deploys never pull images. Upgrade deliberately, on the host:
 ```bash
 cd /home/jalance/Projects/docker-services
-docker compose pull <service>        # or omit <service> for everything
-docker compose up -d <service>
+./scripts/compose.sh pull <service>        # or omit <service> for everything
+./scripts/compose.sh up -d <service>
 ```
+`scripts/compose.sh` is `docker compose` with `HOST_IP`/`TAILSCALE_IP` derived from the host; use it for every compose
+command by hand (see `CLAUDE.md`, Environment Variables).
 Exceptions: a service whose image isn't present locally (e.g. a newly added one) is pulled on
 first `up`, and Plex (`VERSION=public`) updates itself whenever its container restarts.
 Changing an image tag in `docker-compose.yml` through a PR is the reproducible way to upgrade:

@@ -40,5 +40,10 @@ for host in '192.168.0.%' '100.%'; do
     sql="${sql} GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, EXECUTE ON \`$name\`.* TO 'beads'@'${host}';"
 done
 
+# Compose needs HOST_IP and TAILSCALE_IP, derived from the host (not in .env)
+# shellcheck source=lib/host-addrs.sh
+source scripts/lib/host-addrs.sh
+host_addrs_export "$PWD" || exit 1
+
 docker compose exec -T dolt dolt sql -q "$sql"
 echo "database ${name} granted to beads@192.168.0.% and beads@100.%"

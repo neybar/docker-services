@@ -474,9 +474,10 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "${HOST_IP:?set HOST_IP in .env (host LAN IP)}:3307:3306"
+      # HOST_IP/TAILSCALE_IP are derived from the host (scripts/lib/host-addrs.sh), not set in .env.
+      - "${HOST_IP:?host LAN IP, derived from the host: run ./scripts/compose.sh, not docker compose}:3307:3306"
       # The tailnet ACL decides which devices reach this.
-      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env (host Tailscale IP, tailscale ip -4)}:3307:3306"
+      - "${TAILSCALE_IP:?host Tailscale IP, derived from the host: run ./scripts/compose.sh, not docker compose}:3307:3306"
     volumes:
       - /usr/local/dolt/data:/var/lib/dolt
       - type: volume
@@ -878,8 +879,9 @@ services:
       - 127.0.0.1
       - 1.1.1.1
     ports:
-      - "${HOST_IP:?set HOST_IP in .env (host LAN IP; Pi-hole binds :53 only there)}:53:53/tcp"
-      - "${HOST_IP:?set HOST_IP in .env (host LAN IP; Pi-hole binds :53 only there)}:53:53/udp"
+      # Pi-hole binds :53 only on the LAN address (derived, scripts/lib/host-addrs.sh)
+      - "${HOST_IP:?host LAN IP, derived from the host: run ./scripts/compose.sh, not docker compose}:53:53/tcp"
+      - "${HOST_IP:?host LAN IP, derived from the host: run ./scripts/compose.sh, not docker compose}:53:53/udp"
     environment:
       TZ: $TZ
       # Pi-hole v6 only reads FTLCONF_<section>_<setting>. The v5-era vars that used
