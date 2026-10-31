@@ -18,7 +18,7 @@ Start here, because these are the things a fresh host will not have and
 | 10 CIFS mounts (`/mnt/*`) | `/etc/fstab` | **not captured** — template below |
 | CIFS credentials | `/etc/cifspwd` (root, `0600`) | **secret, never commit** |
 | `DNSStubListener=no` | `/etc/systemd/resolved.conf` | **not captured** — needed for Pi-hole |
-| Plex library database | `/usr/local/plex` (13GB) | **not backed up anywhere** — see §6 |
+| Plex library database | `$NVME_DIR/plex/config` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
@@ -102,17 +102,34 @@ paths self-bootstrap: the stack will come up cleanly without them existing.
 That is the trap. A service whose local path is empty starts **fresh**, and
 looks healthy while doing it.
 
+Every service that needs the NVMe lives under one parent, `$NVME_DIR/<service>/<role>`. `NVME_DIR` is optional in
+`.env`; compose defaults it to `/usr/local/docker`, which is on `/` (the NVMe). It is **not** `LOCALDOCKERDIR`, the
+repo checkout on the /home SATA SSD (below). The list is `NVME_PATHS` in `scripts/lib/nvme-paths.sh`;
+`scripts/ci/test-nvme-paths.sh` fails if compose's mounts disagree with it.
+
 | Path | Holds | If empty on rebuild |
 |---|---|---|
-| `/usr/local/plex` | Plex library DB (13GB) | **watch history, collections, ratings and metadata all gone** |
-| `/usr/local/nzbhydra2/database` | NZBHydra2 H2 database (98MB) | search history and stats lost; config is safe in `nzbhydra.yml` on NFS |
-| `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
+| `$NVME_DIR/plex/config` | Plex library DB (13GB) | **watch history, collections, ratings and metadata all gone** |
+| `$NVME_DIR/plex/transcode` | transcode scratch | nothing — intentionally ephemeral |
+| `$NVME_DIR/nzbhydra2/database` | NZBHydra2 H2 database (98MB) | search history and stats lost; config is safe in `nzbhydra.yml` on NFS |
+| `$NVME_DIR/dolt/data` | Dolt databases (Beads) and users, at `/var/lib/dolt` | **every Beads project is gone**, and init recreates only the `beads` users, until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
-| `/usr/local/dolt/data` | Dolt databases (Beads) and users, at `/var/lib/dolt` | **every Beads project is gone**, and init recreates only the `beads` users, until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
 
-Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will
+Restore `$NVME_DIR/plex/config` from backup **before** first `up -d`, or Plex will
 initialise an empty library.
+
+### Legacy paths (before the `$NVME_DIR` layout)
+
+The NVMe data used to live at `/usr/local/plex`, `/tmp/plex_transcode`, `/usr/local/nzbhydra2/database` and
+`/usr/local/dolt/data`. `scripts/migrate-nvme-layout.sh` moves them (a rename: same filesystem) and leaves a symlink
+at each legacy path; `/tmp/plex_transcode` is not moved, its replacement is created empty. Without arguments it is a
+dry run that prints each move, its size and owner; `sudo ./scripts/migrate-nvme-layout.sh --apply` does it (stops and
+restarts plex, hydra and dolt; refuses if a target is non-empty; never deletes). It is idempotent.
+`deploy.sh` refuses to deploy while a legacy path still holds real data and its `$NVME_DIR` path is missing or
+empty (`nvme_layout_check` in `scripts/lib/nvme-paths.sh`), so Plex cannot come up on an empty library that way.
+Restoring onto a host that still has only legacy paths: restore to the legacy path, then run the migrate script,
+or restore straight to the `$NVME_DIR` path.
 
 ### Why these are local and not on the NAS
 
@@ -149,19 +166,19 @@ new SSD. The failing-disk hold on `TODO-local-configs.md` no longer applies.
 | Media libraries | NAS shares | yes |
 | This repo | GitHub | yes |
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
-| **Plex library DB** | `/usr/local/plex` | **NO — see below** |
-| NZBHydra2 H2 DB | `/usr/local/nzbhydra2/database` | no, and acceptable (history only) |
-| Dolt (Beads) data | `/usr/local/dolt/data` (local NVMe) | latest snapshot only, in `/mnt/docker/dolt/backups` (NAS), from jalance's 03:00 crontab (§1). No dated generations |
+| **Plex library DB** | `$NVME_DIR/plex/config` | **NO — see below** |
+| NZBHydra2 H2 DB | `$NVME_DIR/nzbhydra2/database` | no, and acceptable (history only) |
+| Dolt (Beads) data | `$NVME_DIR/dolt/data` (local NVMe) | latest snapshot only, in `/mnt/docker/dolt/backups` (NAS), from jalance's 03:00 crontab (§1). No dated generations |
 | Dolt config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | yes, Synology; templates in `dolt/` |
 
 ### Plex database backup (required, not yet implemented)
 
-`/usr/local/plex` is 13GB but only the `Databases/` directory is
+`$NVME_DIR/plex/config` is 13GB but only the `Databases/` directory is
 irreplaceable — the rest is cache and transcodes that regenerate. A periodic
 tar of just that directory to `/mnt/backups` covers the real risk:
 
 ```
-/usr/local/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/
+$NVME_DIR/plex/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/
 ```
 
 Plex should be stopped, or its scheduled-task backup used, so the SQLite files
@@ -175,7 +192,7 @@ for this stack and is the natural home for it.
 ```bash
 git clone <repo> && cd docker-services
 cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY and DOLT_BEADS_PASSWORD, see below)
-# restore /usr/local/plex from backup FIRST (see §5)
+# restore $NVME_DIR/plex/config (default /usr/local/docker/plex/config) from backup FIRST (see §5)
 touch acme/acme.json && chmod 600 acme/acme.json
 ./scripts/compose.sh up -d   # derives HOST_IP and TAILSCALE_IP; never bare `docker compose` (see below)
 ./scripts/validate-traefik.sh
@@ -212,7 +229,7 @@ Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `./scripts/compose
    cp dolt/init/01-beads-user.sh /mnt/docker/dolt/init/
    ```
    `servercfg/` must hold exactly one `*.yaml`. Keep both files identical to their templates: `deploy.sh` refuses to deploy and `validate-dolt.sh` fails while either differs, and both print the `cp` to run. `certs/` is filled by `dolt-certs.sh` when task-scheduler starts. Until then, dolt's guard refuses to start, and it restarts on its own once the certs exist.
-3. Restore `/usr/local/dolt/data` from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`). Skip this only for a deliberately empty server, where init creates the `beads` users on the first start.
+3. Restore `$NVME_DIR/dolt/data` from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`). Skip this only for a deliberately empty server, where init creates the `beads` users on the first start.
 4. Add the crontab line from §1.
 5. For each new Beads project, run `./scripts/dolt-add-db.sh <prefix>`.
 6. Run `./scripts/validate-dolt.sh`. Every check should pass; it has not yet been run on this host.
@@ -276,8 +293,8 @@ Known gaps, for later work:
 - [ ] Secret handling for `.env` and `/etc/cifspwd` documented end to end
 - [ ] Synology-side configuration (shares, NFS exports, permissions) captured
 - [ ] `TODO-local-configs.md` reconciled: hydra already moved off NFS; the
-      remaining services still need it, and `LOCALDOCKERDIR` must be repointed
-      to the NVMe first
+      remaining services still need it. Local NVMe paths go under `$NVME_DIR`
+      (§5), not `LOCALDOCKERDIR`
 - [ ] DSM `home.thelances.net` is TCP TLS passthrough, so the HTTP WAF cannot inspect it. Covering it needs the host
       `cs-firewall-bouncer` + nftables (needs sudo)
 - [ ] File-provider router `dsm-photo-rtr` (`traefik-rules/synology.yml`, `home.<domain>/photo` to Synology :80) has no middlewares and no entryPoints,

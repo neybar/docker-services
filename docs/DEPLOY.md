@@ -15,8 +15,10 @@ A merge to `master` updates the running stack on orcrist. Nothing else deploys.
    - fetches `master` over HTTPS and fast-forwards (`--ff-only`) to exactly `$GITHUB_SHA`. If HEAD
      already contains that commit (a newer one is deployed), it exits without doing anything.
    - derives `HOST_IP` and `TAILSCALE_IP` from the host (`scripts/lib/host-addrs.sh`; they are not in `.env`) and
-     refuses to deploy if Dolt's live NAS config differs from `dolt/` (`scripts/lib/dolt-nas.sh`, read-only). Both run
-     before any container is touched, and print what to fix; fix it and rerun `./scripts/deploy.sh`.
+     refuses to deploy if Dolt's live NAS config differs from `dolt/` (`scripts/lib/dolt-nas.sh`, read-only), or if
+     NVMe data is still at a legacy path while its `$NVME_DIR` path is missing or empty (`nvme_layout_check` in
+     `scripts/lib/nvme-paths.sh`; fix: `sudo ./scripts/migrate-nvme-layout.sh --apply`). All run before any container
+     is touched, and print what to fix; fix it and rerun `./scripts/deploy.sh`.
    - runs `docker compose config --quiet`, then `docker compose up -d --build --remove-orphans`
    - restarts traefik if anything in `traefik-rules/` is newer than its last start (Traefik does not watch
      that directory, and `up -d` does not recreate traefik when only the rules changed)

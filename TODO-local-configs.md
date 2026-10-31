@@ -5,7 +5,8 @@
 > 1. ~~`LOCALDOCKERDIR` is on a failing disk~~ — resolved 2026-10-17: `/home` (and so
 >    `LOCALDOCKERDIR`) moved to a new 1TB SATA SSD after the 870 EVO failed. See `REBUILD.md` §5.
 > 2. **NZBHydra2 is already done** and is the reference implementation — see `REBUILD.md` §5
->    and the NZBHydra2 note in `CLAUDE.md`. Only its `/config/database` subdirectory moved, via
+>    and the NZBHydra2 note in `CLAUDE.md`. Only its `/config/database` subdirectory moved (now
+>    `$NVME_DIR/nzbhydra2/database`), via
 >    a nested bind mount, so config/logs/backups stay on the NAS. Note it also needed
 >    `stop_grace_period: 120s`.
 > 3. The root cause is broader than SQLite: the Synology periodically revokes NFSv4 lock state
@@ -36,7 +37,10 @@ and rsync to Synology NAS every 4 hours.
 
 ## Step 3: Update env.example
 
-- [ ] Clarify `LOCALDOCKERDIR` = local config storage (e.g. `/usr/local/docker`)
+- [ ] Decide where local config storage goes. Not `LOCALDOCKERDIR` = `/usr/local/docker`: `LOCALDOCKERDIR` is the repo
+      checkout (on the /home SATA SSD), and `/usr/local/docker` is already `NVME_DIR`, the default parent of the NVMe
+      paths in `scripts/lib/nvme-paths.sh` (`$NVME_DIR/<service>/<role>`). A service that moves to the NVMe gets a
+      row there, like NZBHydra2's database.
 - [ ] Clarify `DOCKERDIR` = NFS mount, now backup destination only (e.g. `/mnt/docker`)
 
 ## Step 4: Migration Execution (requires downtime)
