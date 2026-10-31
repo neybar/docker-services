@@ -32,7 +32,7 @@ docker network create --gateway 192.168.91.1 --subnet 192.168.91.0/24 socket_pro
 - **Local disk** (`$LOCALDOCKERDIR/crowdsec/{config,data}`, `$LOCALDOCKERDIR/traefik-logs`): CrowdSec config + SQLite DB
   and Traefik's access log. Gitignored. Regenerable — losing it loses only decisions/alerts history.
 - **NFS** `dolt_config` (`:/volume1/docker/dolt`, CIFS on the host at `/mnt/docker/dolt`): Dolt servercfg, init, entrypoint, certs, and backups. The tracked copies under `dolt/` are copied there at setup. See `dolt/RESTORE.md`.
-- **Local NVMe** `/usr/local/dolt/data`: Dolt's database, nested at `/config/data` inside the NFS config mount (same pattern as NZBHydra2's H2 database). Losing it loses every Beads database until restored from `/mnt/docker/dolt/backups`. `secure_file_priv` is an empty tmpfs at `/secure-priv`.
+- **Local NVMe** `/usr/local/dolt/data`: Dolt's database, a local NVMe bind at `/var/lib/dolt`, the hydra-style exception (not nested under the NFS config). The image entrypoint hardcodes that path for `.init_completed`. Losing it loses every Beads database until restored from `/mnt/docker/dolt/backups`. `secure_file_priv` is an empty tmpfs at `/secure-priv`.
 - **Local NVME** (`/usr/local/nzbhydra2/database`): NZBHydra2's H2 database — mounted at `/config/database`,
   nested inside the NFS `/config`. Embedded random-access databases must not live on NFS (see Notes).
 

@@ -106,7 +106,7 @@ looks healthy while doing it.
 | `/tmp/plex_transcode` | transcode scratch | nothing — intentionally ephemeral |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
-| `/usr/local/dolt/data` | Dolt databases (Beads), nested at `/config/data` | **every Beads project is gone** until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
+| `/usr/local/dolt/data` | Dolt databases (Beads), local NVMe bind at `/var/lib/dolt` | **every Beads project is gone** until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
 | `/mnt/docker/dolt` | Dolt config, certs, and backups (NFS `dolt_config`) | config is copied from git; certs are rewritten by `dolt-certs.sh`; backups are the latest snapshot only |
 
 Restore `/usr/local/plex` from backup **before** first `up -d`, or Plex will

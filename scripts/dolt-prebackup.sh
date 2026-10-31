@@ -45,8 +45,8 @@ for db in $dbs; do
         log "dolt_backup add failed for $db (often already configured); syncing"
     fi
     docker exec dolt dolt sql -q "USE \`$db\`; CALL dolt_backup('sync','nas');"
-    # -d and -fn together are rejected. Databases live under data_dir /config/data.
-    docker exec -w "/config/data/$db" dolt dolt dump -f -r sql -fn "/config/backups/sql/$db.sql"
+    # -d and -fn together are rejected. Databases live under data_dir /var/lib/dolt.
+    docker exec -w "/var/lib/dolt/$db" dolt dolt dump -f -r sql -fn "/config/backups/sql/$db.sql"
 done
 
 grants=$(mktemp)

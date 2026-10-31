@@ -1,7 +1,8 @@
 #!/bin/sh
 # Config lives on the NFS volume mounted at /config (copied from this repo at setup).
 # The image entrypoint only looks in /etc/dolt/servercfg.d and /docker-entrypoint-initdb.d,
-# so those paths are symlinks. Data is the nested bind /config/data (/usr/local/dolt/data).
+# so those paths are symlinks. Data is a local NVMe bind at /var/lib/dolt (/usr/local/dolt/data),
+# the hydra-style exception, not nested under /config. The image entrypoint hardcodes that path.
 # A missing file exits. The image defaults would otherwise start without this config.
 
 set -eu
