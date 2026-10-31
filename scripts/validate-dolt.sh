@@ -125,6 +125,12 @@ section=4
 for target in "LAN:${HOST_IP}" "Tailscale:${TAILSCALE_IP}"; do
     label=${target%%:*}
     ip=${target#*:}
+    if [[ "$label" == Tailscale && "${TAILSCALE_UP:-1}" != 1 ]]; then
+        echo ""
+        print_result "Tailscale address (tailscaled unavailable; Dolt is LAN-only until the next deploy)" "WARN"
+        section=$((section + 1))
+        continue
+    fi
 
     echo ""
     echo -e "${BLUE}${section}. Testing ${label} (${ip}:${DOLT_PORT})${NC}"

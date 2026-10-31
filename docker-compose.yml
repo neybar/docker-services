@@ -476,7 +476,7 @@ services:
     ports:
       # HOST_IP/TAILSCALE_IP are derived from the host (scripts/lib/host-addrs.sh), not set in .env.
       - "${HOST_IP:?host LAN IP, derived from the host: run ./scripts/compose.sh, not docker compose}:3307:3306"
-      # The tailnet ACL decides which devices reach this.
+      # The tailnet ACL decides which devices reach this. 127.0.0.1 while Tailscale is down (host-addrs.sh).
       - "${TAILSCALE_IP:?host Tailscale IP, derived from the host: run ./scripts/compose.sh, not docker compose}:3307:3306"
     volumes:
       - /usr/local/dolt/data:/var/lib/dolt

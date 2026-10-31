@@ -43,7 +43,7 @@ load_env() {
     # in the validate scripts needs both. HOST_IP is also used for local resolution (bypasses public DNS, enables
     # Authelia local bypass).
     if ! host_addrs_export "$PROJECT_DIR"; then
-        echo -e "${RED}Error: cannot derive HOST_IP/TAILSCALE_IP (above)${NC}"
+        echo -e "${RED}Error: cannot derive HOST_IP (above)${NC}"
         exit 1
     fi
     echo -e "${GREEN}Using local resolution: ${HOST_IP} (Tailscale ${TAILSCALE_IP})${NC}"

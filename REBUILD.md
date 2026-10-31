@@ -22,7 +22,7 @@ Start here, because these are the things a fresh host will not have and
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
-| `tailscaled` before dolt | systemd | **not enforced**: if `tailscaled` is down when dolt starts, Docker cannot bind `$TAILSCALE_IP` and dolt does not start; `./scripts/compose.sh up -d dolt` once it is up. While it is down, `TAILSCALE_IP` cannot be derived, so `scripts/compose.sh` and deploys fail loudly |
+| `tailscaled` before dolt | systemd | **not enforced**: if `tailscaled` is down when dolt starts, Docker cannot bind `$TAILSCALE_IP` and dolt does not start; `./scripts/compose.sh up -d dolt` once it is up. While it is down, compose and deploys still run (the helper warns and binds dolt to `127.0.0.1` instead, LAN still works); re-deploy once it is back |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
 ---
@@ -195,9 +195,10 @@ Not in `.env`. `scripts/lib/host-addrs.sh` derives them at every compose run (`s
   `tailscale0`. The host must have exactly one IPv4 default route; with two, it fails instead of guessing. On orcrist the
   address is a DHCP lease on `enp2s0f0`, so keep it reserved on the gateway: `dolt.<domain>` (via `orcrist.<domain>`)
   points at it.
-- `TAILSCALE_IP`: `tailscale ip -4`, so `tailscaled` must be up and logged in.
+- `TAILSCALE_IP`: `tailscale ip -4`. Optional: if `tailscaled` is down or logged out, it is `127.0.0.1` with a warning
+  and Dolt is LAN-only until the next deploy after Tailscale is back. Nothing else uses it.
 
-If either cannot be derived, the run fails with the reason. There is no fallback to `0.0.0.0`.
+If `HOST_IP` cannot be derived, the run fails with the reason. There is no fallback to `0.0.0.0`.
 
 ### Dolt (Beads)
 
