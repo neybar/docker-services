@@ -1,0 +1,93 @@
+name: Integration
+
+# Runs the host-only validate scripts for a PR against the live stack on the self-hosted orcrist runner.
+#
+# pull_request_target, not pull_request, on purpose: the workflow file and scripts/ci/ always come from master, so a
+# PR cannot change the gate or the runner steps (with pull_request it could edit this file and target the runner).
+# No secrets are used and the token is read-only. The PR head is never checked out on the GitHub-hosted job (its
+# objects are only fetched to diff them), and on the runner it is fetched into a temp dir only after the gate passed:
+# same-repo PRs from neybar or cursor/* / claude/* branches. Changes to .github/ or scripts/ci/ run only when the owner
+# adds the `integration` label. See docs/DEPLOY.md.
+on:
+  pull_request_target:
+    branches: [ master ]
+    types: [ opened, synchronize, reopened, labeled ]
+
+permissions:
+  contents: read
+
+# Explicit bash adds -o pipefail, so a failing script is not hidden behind `| tee`.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      checks: ${{ steps.plan.outputs.checks }}
+
+    steps:
+      # master, the base: the plan script must not come from the PR.
+      - name: Checkout master
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: List changed files
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --quiet --no-tags "$REPO_URL" "$HEAD_SHA"
+          # --no-renames: a rename lists both paths, so moving a file out of .github/ still counts.
+          git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA" | tee "$RUNNER_TEMP/changed-files"
+
+      - name: Plan
+        id: plan
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          OWNER: ${{ github.repository_owner }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'integration') }}
+          LABEL_ADDED: ${{ github.event.label.name }}
+          SENDER: ${{ github.event.sender.login }}
+        run: scripts/ci/integration-plan.sh < "$RUNNER_TEMP/changed-files" | tee -a "$GITHUB_OUTPUT"
+
+  integration:
+    name: Validate on orcrist
+    needs: plan
+    # The fork check is repeated here so that no bug in the plan script can send a fork PR to the runner.
+    if: >-
+      needs.plan.outputs.run == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [ self-hosted, orcrist ]
+    timeout-minutes: 45
+    # Newest push wins among queued runs of one PR. Overlap with deploys is prevented by a host lock in
+    # integration-run.sh, not here: sharing the deploy-orcrist group would let a queued PR run cancel a queued deploy.
+    concurrency:
+      group: integration-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      DEPLOY_DIR: /home/jalance/Projects/docker-services
+
+    steps:
+      # master again, into the runner's own workspace (not the deploy checkout). The PR head is fetched by the script.
+      - name: Checkout master
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run checks against the live stack
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHECKS: ${{ needs.plan.outputs.checks }}
+        # $CHECKS is unquoted on purpose: one argument per check.
+        run: scripts/ci/integration-run.sh $CHECKS
