@@ -2,7 +2,7 @@
 
 MySQL-protocol server for [Beads](https://github.com/gastownhall/beads) (`bd` v1.3.x). Not HTTP: no Traefik router, no Authelia. Published on `192.168.0.3:3307` and `100.66.84.41:3307` (orcrist's Tailscale address). Clients use `dolt.thelances.net`, the same way as every other service (`BEADS_DOLT_SERVER_TLS=1` sets the MySQL driver's `tls=true`, which verifies the certificate and the hostname). `dolt.thelances.net` is a CNAME that may be repointed, so clients must never hardcode `orcrist`.
 
-Data is `$LOCALDOCKERDIR/dolt/data` on the host SSD (`LOCALDOCKERDIR` is `/home/jalance/Projects/docker-services`, so it sits under `/home`). Do not put it on the Synology share (NFSv4 lock revocation). A consistent snapshot is written to `$LOCALDOCKERDIR/dolt/backups` by `scripts/dolt-prebackup.sh` immediately before the host restic job. Restic then stores that directory. There is no separate copy to `/mnt/backups/dolt`.
+Config is the NFS volume `dolt_config` (`:/volume1/docker/dolt`), the same share as `/mnt/docker/dolt` on orcrist. The database is `/usr/local/dolt/data`, nested at `/config/data`, because Dolt cannot live on NFSv4 (lock revocation, same as NZBHydra2's H2 database). `scripts/dolt-prebackup.sh` overwrites `/config/backups` on that volume. `secure_file_priv` is an empty tmpfs at `/secure-priv`.
 
 ## What James must do by hand
 
@@ -14,21 +14,41 @@ Do this **before merging**. A merge to `master` deploys, and `docker compose con
    # DOLT_BEADS_PASSWORD=<that value>
    ```
    Hex only. The init script rejects quotes, backslashes, and whitespace because the value is interpolated into SQL.
-2. On orcrist, once, as root. The hook is non-fatal on purpose: if it exits non-zero, restic must still back up `/home`, `/etc`, and `/usr/local`. The previous snapshot files stay on disk for that run. Failing the whole unit would drop every other path for the day because one database command failed.
+2. **Before merge.** A merge to master deploys on the next push. Stage the NAS tree and the local data directory first, or dolt comes up with an empty database and refuses to start until the config files exist.
+
+   From the deploy checkout, with the current container still on the old layout:
 
    ```bash
-   echo '/home/jalance/Projects/docker-services/dolt/data' | sudo tee -a /etc/restic/excludes
-   sudo cp -a /usr/local/sbin/restic-backup "/usr/local/sbin/restic-backup.bak.$(date +%Y%m%d)"
+   docker compose stop dolt
+   sudo mkdir -p /mnt/docker/dolt/servercfg /mnt/docker/dolt/init /mnt/docker/dolt/certs /mnt/docker/dolt/backups /usr/local/dolt
+   cp dolt/servercfg/config.yaml /mnt/docker/dolt/servercfg/config.yaml
+   cp dolt/init/01-beads-user.sh /mnt/docker/dolt/init/01-beads-user.sh
+   cp dolt/entrypoint.sh /mnt/docker/dolt/entrypoint.sh
+   # existing PEMs, if this host already ran dolt-certs.sh
+   cp -a "$LOCALDOCKERDIR/dolt/certs/." /mnt/docker/dolt/certs/ 2>/dev/null || true
+   # database off the checkout and onto the NVMe path
+   if [ -d "$LOCALDOCKERDIR/dolt/data" ]; then
+     sudo mv "$LOCALDOCKERDIR/dolt/data" /usr/local/dolt/data
+   else
+     sudo mkdir -p /usr/local/dolt/data
+   fi
    ```
 
-   Immediately after the check that `/mnt/backups` is mounted, and before `restic backup`, insert:
+   If the cert directory is still empty, `dolt-certs.sh` fills it from `acme.json` and restarts dolt. The entrypoint exits until `certificate.crt` and `privatekey.key` are there. It does not start on image defaults.
+
+   jalance's crontab (docker group, not root). The log is a path jalance can write:
 
    ```bash
-   /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh || echo 'dolt prebackup failed' >&2
+   mkdir -p "$HOME/.local/state"
+   crontab -e
    ```
 
-   `sudoedit /usr/local/sbin/restic-backup` is the edit. If `LOCALDOCKERDIR` in `.env` is not `/home/jalance/Projects/docker-services`, exclude `$LOCALDOCKERDIR/dolt/data` instead. The live data directory is not a consistent copy while sql-server is running, so it must not be in the restic set. The snapshot directory is under `/home`, which restic already includes.
-3. Confirm Traefik already has the `*.thelances.net` wildcard in `$LOCALDOCKERDIR/acme/acme.json`. Dolt waits until `dolt-certs.sh` extracts it. Nothing new to issue.
+   ```cron
+   CRON_TZ=America/Denver
+   0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1
+   ```
+
+3. Confirm Traefik already has the `*.thelances.net` wildcard in `$LOCALDOCKERDIR/acme/acme.json`. `dolt-certs.sh` copies it into `/mnt/docker/dolt/certs`. Nothing new to issue.
 4. **Done.** `dolt.thelances.net` is a DNS-only CNAME to `orcrist.thelances.net` (A `192.168.0.3`, DNS-only; verified via Cloudflare DoH). The `*.thelances.net` wildcard certificate covers `dolt.thelances.net`.
 5. Tailscale is resolved. grokbot-box rejoined as `tag:grokbot`, and the tailnet ACL allows that device orcrist tcp 22/445/3307. Compose publishes `100.66.84.41:3307` as well as `192.168.0.3:3307`. If `tailscaled` is down when the container starts, Docker cannot bind `100.66.84.41` and dolt does not start; start it after `tailscaled`. No systemd change enforces that.
 6. After the stack is up, for each Beads project prefix (the `bd init -p` value, unique on this server):
@@ -73,15 +93,11 @@ Verified against `dolthub/dolt-sql-server:2.6.1` (not against the `bd` binary):
 
 ## Backups
 
-Host `restic-backup.timer` runs daily at 03:30 America/Denver. `/usr/local/sbin/restic-backup` calls `scripts/dolt-prebackup.sh`, then `restic backup` of `/home` (which contains `$LOCALDOCKERDIR`) to `/mnt/backups`, with `forget --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune`.
+jalance's crontab runs `scripts/dolt-prebackup.sh` at 03:00 America/Denver. It uses the host Docker socket. If dolt is not running it logs that and exits 0. Otherwise, per non-system database, it overwrites the latest files on the NAS volume at `/config/backups` (`/mnt/docker/dolt/backups` on the host):
 
-The hook, per non-system database, overwrites the latest files under `$LOCALDOCKERDIR/dolt/backups`:
-
-1. `CALL dolt_backup('sync','restic')` to `native/<db>` (a mirror: deleted branches disappear here; restic keeps older snapshots).
+1. `CALL dolt_backup('sync','nas')` to `native/<db>` (a mirror: deleted branches disappear at this path; there is no dated copy).
 2. `dolt dump -r sql` to `sql/<db>.sql`.
 3. `SHOW GRANTS` for both `beads` hosts, plus `mysql.user`, in `grants.sql`.
-
-If dolt is not running the hook logs that and exits 0. `$LOCALDOCKERDIR/dolt/data` belongs in `/etc/restic/excludes`. A file copy of that directory while the server is up is not consistent.
 
 `bd export` is the human-readable issue export and is not a full backup. Once `bd` is installed on a client that already points at this server:
 
@@ -93,32 +109,26 @@ Run that per workspace. It is not wired into `task-scheduler`.
 
 ## Restore
 
-Restore a restic snapshot of `$LOCALDOCKERDIR/dolt/backups` (the repository is `/mnt/backups`). Pick a snapshot id from `sudo restic -r /mnt/backups snapshots`, then:
+The latest snapshot is already on the NAS at `/mnt/docker/dolt/backups` (inside the container, `/config/backups`). There is no older generation in this directory.
+
+SQL dump of one project (server can stay up; load into an empty database created by `scripts/dolt-add-db.sh`):
 
 ```bash
-sudo restic -r /mnt/backups restore <snapshot-id> \
-  --target /tmp/dolt-restore \
-  --include /home/jalance/Projects/docker-services/dolt/backups
-```
-
-The files land at `/tmp/dolt-restore/home/jalance/Projects/docker-services/dolt/backups/`. SQL dump of one project (server can stay up; load into an empty database created by `scripts/dolt-add-db.sh`):
-
-```bash
-docker exec -i dolt dolt sql < /tmp/dolt-restore/home/jalance/Projects/docker-services/dolt/backups/sql/<prefix>.sql
+docker exec -i dolt dolt sql < /mnt/docker/dolt/backups/sql/<prefix>.sql
 ```
 
 Native backup (all branches and the working set). Stop dolt first so nothing else has the data directory open:
 
 ```bash
 docker run --rm \
-  -v /tmp/dolt-restore/home/jalance/Projects/docker-services/dolt/backups/native/<prefix>:/backup:ro \
+  -v /mnt/docker/dolt/backups/native/<prefix>:/backup:ro \
   -v /tmp/dolt-restore-db:/restore \
   dolthub/dolt-sql-server:2.6.1 \
   dolt backup restore file:///backup /restore
 ```
 
-Stop the server, replace `$LOCALDOCKERDIR/dolt/data/<prefix>` with the restored directory, start the server, and run `scripts/dolt-add-db.sh <prefix>` again if the grants dump is what you are recovering (the native backup does not include users). Replay `grants.sql` only after reading it; it is a `SHOW GRANTS` transcript, not a `mysqldump` of the `mysql` database (`mysqldump` is not in the image).
+Stop the server, replace `/usr/local/dolt/data/<prefix>` with the restored directory, start the server, and run `scripts/dolt-add-db.sh <prefix>` again if the grants dump is what you are recovering (the native backup does not include users). Replay `grants.sql` only after reading it; it is a `SHOW GRANTS` transcript, not a `mysqldump` of the `mysql` database (`mysqldump` is not in the image).
 
 Users are recreated from the secret by the init script on an empty data directory. On an existing data directory, run `01-beads-user.sh` as above, then `dolt-add-db.sh` for each prefix.
 
-Cert and server YAML live in git (`dolt/servercfg/config.yaml`) and in `$LOCALDOCKERDIR/acme/acme.json` (Traefik). They are not in the Dolt backup. Losing `$LOCALDOCKERDIR/dolt/data` loses every project until you restore a backup.
+Server YAML, the init script, and the entrypoint are in git under `dolt/` and on the NAS at `/mnt/docker/dolt`. The wildcard PEM is in `$LOCALDOCKERDIR/acme/acme.json` (Traefik) and is copied to `/mnt/docker/dolt/certs` by `dolt-certs.sh`. Losing `/usr/local/dolt/data` loses every project until you restore a backup.
