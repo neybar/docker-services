@@ -1,6 +1,6 @@
 # Dolt (Beads) restore
 
-How the service is set up (NAS config, local data, guard, privileges, backup cron): the Dolt note in `CLAUDE.md`. Bring-up on a fresh host: `REBUILD.md` §7.
+How the service is set up (NAS config, local data, guard, privileges, backup cron): [README.md](README.md). Bring-up on a fresh host: `REBUILD.md` §7.
 
 Run everything from the deploy checkout on orcrist. None of these procedures has been exercised end to end yet. Compose runs through `./scripts/compose.sh`, which derives `HOST_IP`/`TAILSCALE_IP` (they are not in `.env`).
 

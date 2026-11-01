@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Compare Dolt's live config on the NAS with the repo templates in dolt/. Source it, do not run it.
-# The live copies are copied by hand (the repo is public, see the CLAUDE.md Dolt note), so a merged template change
+# The live copies are copied by hand (the repo is public, see dolt/README.md), so a merged template change
 # does not deploy and the two drift silently. deploy.sh refuses to deploy on drift; validate-dolt.sh fails on it.
 # Read-only: it never writes to the NAS.
 #
