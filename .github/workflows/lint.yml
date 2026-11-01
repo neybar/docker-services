@@ -46,6 +46,10 @@ jobs:
       - name: Test nvme-paths.sh
         run: ./scripts/ci/test-nvme-paths.sh
 
+      # AGENTS.md size cap, CLAUDE.md/GEMINI.md pointers, named repo paths, bd generated-block markers.
+      - name: Test agent docs
+        run: ./scripts/ci/test-agent-docs.sh
+
   docker-compose:
     name: Docker Compose Validation
     runs-on: ubuntu-latest
