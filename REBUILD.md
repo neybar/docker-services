@@ -4,7 +4,8 @@ Everything needed to bring this stack up on a fresh host. The goal is that a
 rebuild needs **no verbal instructions** — if you find yourself guessing, that
 is a bug in this document, so fix it here.
 
-Read alongside `CLAUDE.md` (architecture) and `env.example` (variables).
+Read alongside `README.md` (services, networks, variables), `env.example` and `docs/CROWDSEC.md` / `dolt/README.md`
+(subsystem details). Rules for agents are in `AGENTS.md`.
 
 ---
 
@@ -49,7 +50,31 @@ DNSStubListener=no
 ```
 
 Then `sudo systemctl restart systemd-resolved`. Without this, the `pihole`
-container fails to bind and the stack comes up degraded.
+container fails to bind and the stack comes up degraded. (It is already set on
+orcrist, so there is no conflict today.) Pi-hole binds `:53` on `$HOST_IP` only,
+not `0.0.0.0`.
+
+### Pi-hole (cold standby)
+
+- **Cold standby only.** NextDNS serves live DNS (host resolvers are
+  `45.90.28.234`/`45.90.30.234`) and nothing points at Pi-hole; it is kept in
+  case NextDNS is dropped.
+- It runs **v6**, which reads **only** `FTLCONF_<section>_<setting>` env vars.
+  All v5-style vars (`WEBPASSWORD`, `DNS1`, `ServerIP`, `PUID`/`PGID`,
+  `CONDITIONAL_FORWARDING*`, …) are silently ignored. `PUID`/`PGID` in
+  particular are a LinuxServer.io convention the official image does not
+  implement: it starts as root and FTL drops to its own `pihole` user (uid 1000).
+- The live config is `pihole.toml`, which is **gitignored** (under
+  `$LOCALDOCKERDIR/pihole`), so the settings that matter are restated as
+  `FTLCONF_*` in compose to keep them reproducible. Settings supplied via env
+  become read-only in the web UI.
+- FTL's long-term query database is off (`FTLCONF_database_maxDBdays: "0"`): it
+  had reached 1.46GB on the old (since failed) /home SSD and corrupted itself
+  with unreadable pages. `gravity.db` (the blocklist, ~86k domains, refreshed by
+  in-container cron Sundays 04:26) is what makes the standby usable; keep that one.
+- v6 logs to the `/var/log/pihole/` **directory**, and those logs are not
+  persisted. The old single-file `pihole.log` bind mount was a v5 path and did
+  nothing.
 
 ---
 
@@ -109,9 +134,9 @@ repo checkout on the /home SATA SSD (below). The list is `NVME_PATHS` in `script
 
 | Path | Holds | If empty on rebuild |
 |---|---|---|
-| `$NVME_DIR/plex/config` | Plex library DB (13GB) | **watch history, collections, ratings and metadata all gone** |
-| `$NVME_DIR/plex/transcode` | transcode scratch | nothing — intentionally ephemeral |
-| `$NVME_DIR/nzbhydra2/database` | NZBHydra2 H2 database (98MB) | search history and stats lost; config is safe in `nzbhydra.yml` on NFS |
+| `$NVME_DIR/plex/config` (`/config`) | Plex library DB (13GB) | **watch history, collections, ratings and metadata all gone** |
+| `$NVME_DIR/plex/transcode` (`/transcode`) | transcode scratch, local for speed | nothing — intentionally ephemeral |
+| `$NVME_DIR/nzbhydra2/database` (`/config/database`, nested inside the NFS `/config`) | NZBHydra2 H2 database (98MB) | search history and stats lost; config is safe in `nzbhydra.yml` on NFS |
 | `$NVME_DIR/dolt/data` | Dolt databases (Beads) and users, at `/var/lib/dolt` | **every Beads project is gone**, and init recreates only the `beads` users, until restored from `/mnt/docker/dolt/backups` (`dolt/RESTORE.md`) |
 | `$LOCALDOCKERDIR/crowdsec/{config,data}` | CrowdSec config + SQLite DB | nothing irreplaceable — regenerated on first start; ban decisions and alert history are lost (CAPI blocklist re-syncs) |
 | `$LOCALDOCKERDIR/traefik-logs` | Traefik access log (`access.log`, current file + 2 rotated `access.log.<timestamp>`; dir mode 700) | nothing — log history only |
@@ -135,7 +160,7 @@ or restore straight to the `$NVME_DIR` path.
 
 Embedded databases that do random-access reads do not survive network
 filesystems here. The Synology periodically revokes NFSv4 lock state — the
-kernel logs `NFS: : lost 3 locks`, roughly every 9 days — and with
+kernel logs `NFS: : lost 3 locks` (in `dmesg`), roughly every 9 days — and with
 `recover_lost_locks` off by default (the kernel calls recovery a
 data-corruption risk) that surfaces to the application as `EIO`. `hard`,
 `timeo` and `retrans` do not help; they only cover timeouts.
@@ -144,6 +169,12 @@ H2 treats any I/O error as fatal, never reopens its file handle, and stays
 broken until the process restarts
 ([h2database#1954](https://github.com/h2database/h2database/issues/1954), open
 since 2019). SQLite-based services survive because they reopen and retry.
+So one NFS blip wedges NZBHydra2's database until the container restarts.
+
+NZBHydra2's database path is not independently configurable (H2's URL is
+`${nzbhydra.dataFolder}/database/nzbhydra`), hence the nested bind mount: only
+`/config/database` is local, config/logs/backups stay on the NAS.
+`stop_grace_period: 120s` is required so H2 can compact on shutdown.
 
 ### /home disk
 
@@ -219,7 +250,7 @@ If `HOST_IP` cannot be derived, the run fails with the reason. There is no fallb
 
 ### Dolt (Beads)
 
-Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `./scripts/compose.sh up -d`.
+Background is in `dolt/README.md`. Do steps 1-3 before `./scripts/compose.sh up -d`.
 
 1. In `.env`, set `DOLT_BEADS_PASSWORD` (`openssl rand -hex 32`, hex only). Compose refuses to render without it. `tailscaled` must be up (see Host addresses above).
 2. Stage the NAS config from the templates. Every subpath must exist, because compose mounts each one:
@@ -250,9 +281,6 @@ Background is in the CLAUDE.md Dolt note. Do steps 1-3 before `./scripts/compose
 4. A Traefik restart costs ~2s of connection refused, with no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
 
-Rollback if the WAF misbehaves: revert the PR. The deploy (`up -d --build --remove-orphans`) points Traefik back at the NFS rules in `/mnt/docker/traefik3/rules/`,
-which are kept as the pre-WAF copy (chains without `crowdsec@file`), and removes crowdsec. Keep that NFS directory until the WAF has proven stable; once it is deleted, a revert has no rules to fall back on.
-
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
 Every chained router returns 403 from the delete until the recreate below (an outage), so run the steps back to back: `./scripts/compose.sh exec crowdsec cscli bouncers delete traefik` (this also deletes every auto-created `traefik@<ip>` entry; CrowdSec refuses to delete those on their own), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `./scripts/compose.sh up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
 run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 POST/PUT/PATCH/DELETE without Content-Length) are blocked, not passed; GET/HEAD go to AppSec header-only and pass (`crowdsecAppsecUnreadableBodyBlock=true`, the plugin default). A key mismatch is not a silent fail-open: a wrong or unregistered key blocks every chained router with 403 (the LAPI stream fails open, but AppSec answers an unknown key with 401, and the plugin blocks on any AppSec error other than 500/502/503/504/unreachable). `validate-waf.sh` detects it (the normal-page check fails).
@@ -262,14 +290,8 @@ Docker access: none. CrowdSec does not read Authelia logs: the only way without 
 in `/mnt/docker/authelia/configuration.yml`). Scenario `crowdsecurity/http-crawl-non_statics` is disabled (`DISABLE_SCENARIOS`): it would ban our own WAN IP.
 CRS out-of-band is alerts only: its ban scenario `crowdsecurity/crowdsec-appsec-outofband` is also disabled there until tuned.
 
-**Merging the CrowdSec PR.** The live stack already runs the branch. Do not `git switch master` before local `master` contains the merge: the old `master` has no
-`traefik-rules/`, so the switch deletes the directory under the running Traefik (it keeps its loaded config, but a restart meanwhile would come up without the chains,
-and docker would recreate the directory empty and root-owned). Running `docker compose up` from the old `master` puts Traefik back on the pre-WAF NFS rules (no outage, but no WAF).
-Procedure: merge the PR, then in the deploy checkout `git fetch origin master:master && git switch master` (moves local `master` to the merge without touching
-the working tree, so `traefik-rules/` is unchanged), then `./scripts/deploy.sh` (or re-run the failed Deploy workflow).
-The merge-triggered deploy refuses while the checkout is on the feature branch; that is expected. See `docs/DEPLOY.md`.
 Chains cover every HTTP router except the file-provider `dsm-photo-rtr` and `http-catchall` (redirect to HTTPS only, no backend). The DSM TCP passthrough routers `grond-https-rtr`/`grond-admin-rtr` are TCP, so no HTTP middleware applies (see §8).
-The Traefik access log holds API keys from query strings (`$LOCALDOCKERDIR/traefik-logs`, `root:root` 0644).
+How the WAF works, why it fails open, and how to operate it: `docs/CROWDSEC.md`.
 
 Expected validation result on the current host: **27 pass, 2 fail**.
 
@@ -280,6 +302,22 @@ Expected validation result on the current host: **27 pass, 2 fail**.
   `app/database.py:404`, where `get_current_revision()` returns bytes into
   `os.environ`. Needs an upstream fix or a pin to a working image tag. On a
   fresh rebuild this may or may not reproduce depending on the image version.
+
+### Traefik access log
+
+It goes to a file, `$LOCALDOCKERDIR/traefik-logs/access.log` (full log, no status filter), not stdout, so it does not
+appear in `docker logs traefik`. CrowdSec reads it.
+
+- **Sensitive**: it records query strings, so API keys passed as `?apikey=` (*arr, hydra) are stored in clear text,
+  `root:root` 0644, in `$LOCALDOCKERDIR/traefik-logs` (dir mode 700, owned by `jalance`; containers run as root; the
+  rotation job re-enforces 700 every run).
+- **Rotation**: task-scheduler, daily at 00:10 (`traefik-logrotate.sh`), copytruncate: `cp -p` to
+  `access.log.<YYYYmmdd-HHMMSS>`, then truncate `access.log` in place. No signal, no Docker access, and `access.log`
+  never disappears. Retention is the current file + 2 rotated (newest 2 by name).
+- This is safe because Traefik opens the file `O_APPEND` (`openAccessLogFile`, v3.6), verified by truncating the live
+  file: it restarted at 411 bytes, no NUL bytes. CrowdSec re-opens the truncated file (`Re-opening truncated file`) and
+  keeps reading. A line written between the copy and the truncate is missing from the archive only; CrowdSec reads it
+  as it is written.
 
 ---
 
