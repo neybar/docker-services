@@ -136,4 +136,6 @@ Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Its con
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the automated task workflow using `ralph.sh`.
+Changes go through a feature branch and a PR; a merge to `master` deploys ([docs/DEPLOY.md](docs/DEPLOY.md)).
+Agent instructions (Claude Code, Codex, Cursor, Gemini): [AGENTS.md](AGENTS.md). Open work is tracked in Beads
+(`bd ready`), on the shared Dolt server, not in markdown TODO files.
