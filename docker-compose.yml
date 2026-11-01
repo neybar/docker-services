@@ -332,9 +332,8 @@ services:
       socket_proxy:
         # ipv4_address: 192.168.91.254 # You can specify a static IP
     privileged: true
-    ports:
-      # - 2375 # Port 2375 should only ever get exposed to the internal network.
-      - "127.0.0.1:2375:2375" # Port 2375 should only ever get exposed to the internal network.
+    # No published port. Clients reach it as tcp://socket-proxy:2375 on the socket_proxy network only.
+    # CONTAINERS=1 + POST=1 can create privileged containers, so a host port would be root for any local user.
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
     environment:
