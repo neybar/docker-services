@@ -34,7 +34,7 @@ The script runs from the deploy checkout, so each deploy executes the `deploy.sh
 *before* the fast-forward. A change to `deploy.sh` takes effect on the deploy after the one that
 ships it.
 
-Working on a feature branch in the deploy checkout pauses auto-deploys: `deploy.sh` exits unless the checkout is on `master`. Switch back to `master` before merging (for the CrowdSec PR, after merging: `REBUILD.md` §7).
+Working on a feature branch in the deploy checkout pauses auto-deploys: `deploy.sh` exits unless the checkout is on `master`. Switch back to `master` before merging. Never switch it to a commit without `traefik-rules/` ([CROWDSEC.md](CROWDSEC.md), Traefik file rules). Agents never use the deploy checkout: they work in their own clone.
 
 To run a deploy by hand: `./scripts/deploy.sh` (deploys the tip of `master`), or use
 **Actions > Deploy > Run workflow** on `master`.
@@ -160,8 +160,6 @@ The runner updates itself. To remove it: `sudo ./svc.sh stop && sudo ./svc.sh un
 A failed deploy leaves the checkout at the new commit and prints the commits it contained. It
 never resets automatically.
 
-**CrowdSec WAF:** merging its PR has a specific order (switch to `master` only after the merge), and rolling it back is a plain revert; see `REBUILD.md` §7.
-
 **Normal path:** revert on `master` through a PR. Merging it deploys the revert.
 ```bash
 git switch -c revert-<thing> origin/master
@@ -189,7 +187,7 @@ cd /home/jalance/Projects/docker-services
 ./scripts/compose.sh up -d <service>
 ```
 `scripts/compose.sh` is `docker compose` with `HOST_IP`/`TAILSCALE_IP` derived from the host; use it for every compose
-command by hand (see `CLAUDE.md`, Environment Variables).
+command by hand (see `README.md`, Environment).
 Exceptions: a service whose image isn't present locally (e.g. a newly added one) is pulled on
 first `up`, and Plex (`VERSION=public`) updates itself whenever its container restarts.
 Changing an image tag in `docker-compose.yml` through a PR is the reproducible way to upgrade:

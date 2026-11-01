@@ -29,7 +29,7 @@ Self-hosted services running on Docker Compose behind Traefik with a CrowdSec WA
 | Collection Mgmt | Kometa | internal only (no web UI) |
 | Books | Calibre-Web | `books.$DOMAINNAME` |
 | Books | Lazy Librarian | `lazylib.$DOMAINNAME` |
-| DNS | Pi-hole | `pihole.$DOMAINNAME/admin/` |
+| DNS | Pi-hole (cold standby) | `pihole.$DOMAINNAME/admin/`; DNS on `$HOST_IP:53` only |
 | Home Automation | Home Assistant | `homeassistant.$DOMAINNAME` |
 | Utilities | iSponsorBlockTV | internal only |
 | Utilities | LibreSpeed | `speedtest.$DOMAINNAME` |
@@ -46,16 +46,26 @@ cp env.example .env
 ```
 
 Key variables:
-- `DOMAINNAME` — your domain (all services run as subdomains)
-- `CLOUDFLARE_EMAIL` (Let's Encrypt account email), `CLOUDFLARE_DNS_API_TOKEN` (scoped "Edit zone DNS" token), `CLOUDFLARE_ZONEID` — for Let's Encrypt DNS challenge
-- `DOCKERDIR` — NFS mount path (e.g. `/mnt/docker`)
-- `LOCALDOCKERDIR` — local project directory path
-- `PLEX_TOKEN` — required for Kometa (get from Plex account settings)
-- `TMDB_API_READ_ACCESS_TOKEN` — required for Kometa (TMDb v4 read token)
-- `CROWDSEC_BOUNCER_KEY` — Traefik/CrowdSec bouncer key (`openssl rand -hex 32`)
-- `DOLT_BEADS_PASSWORD` — Beads SQL password (`openssl rand -hex 32`, hex only). Compose secret, not a container env var
-- Not in `.env`: `HOST_IP`, `TAILSCALE_IP` (host LAN and Tailscale addresses; Dolt publishes `:3307` on both) are
-  derived from the host at every compose run by `scripts/lib/host-addrs.sh` (see `REBUILD.md` §7, Host addresses)
+
+| Variable | Purpose |
+|----------|---------|
+| `DOMAINNAME` | Primary domain; every service is a subdomain |
+| `CLOUDFLARE_EMAIL` | Let's Encrypt account email (ACME registration) |
+| `CLOUDFLARE_DNS_API_TOKEN` | DNS challenge token from the "Edit zone DNS" template, scoped to `DOMAINNAME`'s zone only (below). Reaches Traefik as the compose secret `cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`). Never the Global API Key |
+| `CLOUDFLARE_ZONEID` | Zone ID (not referenced by compose) |
+| `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
+| `LOCALDOCKERDIR` | The repo checkout (`/home/jalance/Projects/docker-services`, on the /home SATA SSD; `REBUILD.md` §5). Holds the gitignored local state: `acme/`, `crowdsec/`, `traefik-logs/`, `pihole/` |
+| `NVME_DIR` | Optional. Parent of the local NVMe paths `$NVME_DIR/<service>/<role>` (default `/usr/local/docker`, on `/`; `REBUILD.md` §5). Not `LOCALDOCKERDIR` |
+| `SYNOLOGYDIR` | Synology NAS mount |
+| `CROWDSEC_BOUNCER_KEY` | Traefik↔CrowdSec bouncer key (`openssl rand -hex 32`). Passed to both as the compose secret `crowdsec_bouncer_key`; CrowdSec registers it as bouncer `traefik` ([docs/CROWDSEC.md](docs/CROWDSEC.md)) |
+| `DOLT_BEADS_PASSWORD` | Password for the Dolt user `beads` (`openssl rand -hex 32`, hex only). Compose secret `dolt_beads_password`, not a container env var |
+| `PLEX_TOKEN` | Plex auth token (used by Kometa; from Plex account settings) |
+| `TMDB_API_READ_ACCESS_TOKEN` | TMDb v4 read token (used by Kometa) |
+| `HOST_IP` | **Not in `.env`**: derived at every compose run by `scripts/lib/host-addrs.sh` (source address of the main table's IPv4 default route; exactly one default route required). The only address Pi-hole binds `:53` and Dolt `:3307` on; also used for local resolution by the validate scripts |
+| `TAILSCALE_IP` | **Not in `.env`**: derived the same way, from `tailscale ip -4`. Optional: if it cannot be derived it is `127.0.0.1` with a warning, so deploys still run and Dolt is LAN-only until the next deploy after `tailscaled` is back. Only Dolt uses it |
+
+The derived `HOST_IP`/`TAILSCALE_IP` override any left in `.env`, and the helper warns while `.env` still sets them.
+Details: `REBUILD.md` §7, Host addresses.
 
 #### Cloudflare DNS token (`CLOUDFLARE_DNS_API_TOKEN`)
 
@@ -84,6 +94,11 @@ Compose refuses to start if the variable is empty. The token reaches Traefik as 
 only as a failed renewal in `./scripts/compose.sh logs traefik`.
 
 ### 2. Docker Networks
+
+Both are external, so create them before the first run:
+- `t2_proxy` (192.168.90.0/24): Traefik and every web-accessible service
+- `socket_proxy` (192.168.91.0/24): isolated, Docker Socket Proxy only. Nothing gets the Docker socket directly, and
+  CrowdSec has no Docker API access at all
 
 ```bash
 docker network create --gateway 192.168.90.1 --subnet 192.168.90.0/24 t2_proxy
@@ -130,10 +145,26 @@ Task Scheduler handles routine maintenance automatically:
 - **Daily at 03:00** (jalance's crontab, `CRON_TZ=America/Denver`): `scripts/dolt-prebackup.sh` overwrites a consistent snapshot on the NAS at `/mnt/docker/dolt/backups`
 - **Daily at 1 AM**: Kometa runs and updates Plex collections
 
+## Service notes
+
+- **Plex**: LinuxServer.io image with `/dev/dri` GPU transcoding; `VERSION=public` updates it on every container
+  restart. Its library database is on the local NVMe and in no backup (`REBUILD.md` §5-6).
+- **Kometa**: runs daily at 1 AM; reads `PLEX_TOKEN` and `TMDB_API_READ_ACCESS_TOKEN` from the env; config at
+  `/mnt/docker/kometa/config.yml` (template `kometa/config.yml.example`).
+- **Home Assistant**: privileged, host network (needed for device access).
+- **Pi-hole**: cold standby, v6 (`FTLCONF_*` env vars only); see `REBUILD.md` §2.
+- **NZBHydra2**: its H2 database is on the local NVMe, not NFS (`REBUILD.md` §5).
+- **Logging**: every container uses `*default-logging` (json-file, 10MB max, 3 files). Application logs on NFS rotate
+  themselves; do not add an external logrotate. Exception: Traefik's access log (`REBUILD.md` §7).
+- **CrowdSec WAF** and the Traefik file rules: [docs/CROWDSEC.md](docs/CROWDSEC.md).
+
 ## Dolt (Beads)
 
-Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Its config lives on the NAS; `dolt/` holds templates. Details: the Dolt note in [CLAUDE.md](CLAUDE.md), restore: [dolt/RESTORE.md](dolt/RESTORE.md).
+Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Its config lives on the NAS; `dolt/` holds
+templates. Details: [dolt/README.md](dolt/README.md), restore: [dolt/RESTORE.md](dolt/RESTORE.md).
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the automated task workflow using `ralph.sh`.
+Changes go through a feature branch and a PR; a merge to `master` deploys ([docs/DEPLOY.md](docs/DEPLOY.md)).
+Agent instructions (Claude Code, Codex, Cursor, Gemini): [AGENTS.md](AGENTS.md). Open work is tracked in Beads
+(`bd ready`), on the shared Dolt server, not in markdown TODO files.

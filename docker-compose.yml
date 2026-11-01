@@ -478,7 +478,7 @@ services:
       # The tailnet ACL decides which devices reach this. 127.0.0.1 while Tailscale is down (host-addrs.sh).
       - "${TAILSCALE_IP:?host Tailscale IP, derived from the host: run ./scripts/compose.sh, not docker compose}:3307:3306"
     volumes:
-      # NVMe ($NVME_DIR): the databases. The image's VOLUME; its entrypoint keeps .init_completed here. See CLAUDE.md Dolt
+      # NVMe ($NVME_DIR): the databases. The image's VOLUME; its entrypoint keeps .init_completed here. See dolt/README.md
       - type: bind  # create_host_path false: fail loudly instead of starting on an empty dir
         source: ${NVME_DIR:-/usr/local/docker}/dolt/data
         target: /var/lib/dolt
@@ -748,7 +748,7 @@ services:
       - no-new-privileges:true
     volumes:
       - hydra_config:/config
-      # NVMe ($NVME_DIR) - H2 cannot survive NFSv4 lock revocation; see CLAUDE.md Storage
+      # NVMe ($NVME_DIR) - H2 cannot survive NFSv4 lock revocation; see REBUILD.md §5
       - type: bind  # create_host_path false: fail loudly instead of starting on an empty dir
         source: ${NVME_DIR:-/usr/local/docker}/nzbhydra2/database
         target: /config/database
