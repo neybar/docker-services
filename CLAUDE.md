@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
+@AGENTS.md
+
 ## Project Overview
 
 Home server Docker infrastructure orchestrating self-hosted services via Docker Compose behind a Traefik reverse proxy with Authelia SSO/2FA.
