@@ -12,3 +12,10 @@ slideshow_updater/
 /dolt/certs/
 /dolt/secure-priv/
 /dolt/backups/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

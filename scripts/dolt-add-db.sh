@@ -7,8 +7,8 @@
 #
 # bd init --server --external creates the database itself when it is missing
 # (CreateIfMissing is set on that path in beads v1.3.2). This script pre-creates
-# it so beads does not need a global CREATE grant. Whether `bd init --external`
-# then finishes against that pre-created database was not run here (no bd binary).
+# it so beads does not need a global CREATE grant. `bd init --external` against
+# the pre-created database is verified with bd 1.3.2 (database `ds`).
 
 set -euo pipefail
 
@@ -33,11 +33,12 @@ case $name in
 esac
 
 # CREATE/DROP/ALTER/INDEX are for bd's schema and migrations.
+# CREATE VIEW/SHOW VIEW: bd migrations create and replace views (0017 onwards).
 # EXECUTE covers DOLT_ADD, DOLT_COMMIT, and DOLT_CHECKOUT on this database.
 # No GRANT OPTION, FILE, CREATE USER, or *.* .
 sql="CREATE DATABASE IF NOT EXISTS \`$name\`;"
 for host in '192.168.0.%' '100.%'; do
-    sql="${sql} GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, EXECUTE ON \`$name\`.* TO 'beads'@'${host}';"
+    sql="${sql} GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, EXECUTE, CREATE VIEW, SHOW VIEW ON \`$name\`.* TO 'beads'@'${host}';"
 done
 
 # Compose needs HOST_IP and TAILSCALE_IP, derived from the host (not in .env)
