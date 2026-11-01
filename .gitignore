@@ -19,3 +19,8 @@ slideshow_updater/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Per-user Claude Code permissions (shared hooks are in .claude/settings.json)
+.claude/settings.local.json
+# Beads JSONL exports: the Dolt server is the source of truth (AGENTS.md)
+.beads/issues.jsonl
