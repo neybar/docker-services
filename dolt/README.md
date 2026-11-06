@@ -6,15 +6,13 @@ agents (claiming, credentials, schema migrations): `AGENTS.md`, "Beads in this r
 
 ## Network
 
-- Publishes `:3307` on `$HOST_IP` and `$TAILSCALE_IP`, never `0.0.0.0`. Both are derived at every compose run by
-  `scripts/lib/host-addrs.sh` (`REBUILD.md` §7, Host addresses).
-- The tailnet ACL decides which tailnet devices reach it (grokbot-box, `tag:grokbot`: orcrist tcp 22/445/3307).
-- If `tailscaled` is down when the container starts (e.g. at boot), Docker cannot bind `$TAILSCALE_IP` and dolt does not
-  start; nothing orders the two. Compose runs (deploys included) never fail on Tailscale: while it is down the helper
-  binds `127.0.0.1` instead and warns, so a deploy brings dolt back LAN-only, and the next deploy after `tailscaled`
-  returns restores the tailnet address.
-- Clients use `dolt.<domain>`: a DNS-only CNAME to `orcrist.<domain>` (A `$HOST_IP`), covered by the `*.<domain>`
-  wildcard cert. It may be repointed, so clients never hardcode `orcrist`. Tailscale clients connect to `$TAILSCALE_IP`
+- Goal: **zero outside access**. `:3307` is published on every host address (`AGENTS.md` hard rule 4: no host IPs in
+  compose). The router does not forward 3307; clients off the LAN (e.g. grokbot) connect only over Tailscale or VPN.
+  The tailnet ACL decides which tailnet devices reach it (grokbot-box, `tag:grokbot`: orcrist tcp 22/445/3307). TLS
+  and per-user passwords are required on every connection.
+- Clients use `dolt.<domain>`: a DNS-only CNAME to `orcrist.<domain>` (A record: orcrist's private LAN address, so it
+  resolves publicly but is reachable only from the LAN), covered by the `*.<domain>`
+  wildcard cert. It may be repointed, so clients never hardcode `orcrist`. Tailscale clients connect to orcrist's Tailscale address
   with TLS server name `dolt.<domain>` (an `/etc/hosts` entry), never skip-verify.
 
 ## Config stays on the NAS, not in git
@@ -26,7 +24,7 @@ NFS volume `dolt_config` (`:/volume1/docker/dolt`, CIFS on the host at `/mnt/doc
 This directory (`dolt/`) holds **templates** only (`servercfg/config.yaml`, `init/01-beads-user.sh`), copied by hand
 like `kometa/config.yml.example`, because the repo is public and live config can be identifying.
 
-- A merged template change does **not** deploy: copy it to the NAS, then `./scripts/compose.sh restart dolt`.
+- A merged template change does **not** deploy: copy it to the NAS, then `docker compose restart dolt`.
 - Drift cannot pass silently: `deploy.sh` refuses to deploy (before touching any container) and `validate-dolt.sh`
   fails while `servercfg/config.yaml` or `init/01-beads-user.sh` on the NAS differs from its template, and both print
   the `diff`/`cp` commands (`scripts/lib/dolt-nas.sh`, read-only). A PR that changes a template therefore fails its
@@ -91,7 +89,7 @@ task-scheduler because it needs `docker exec`, and socket-proxy `EXEC` stays off
 ## Validation
 
 Run `./scripts/validate-dolt.sh` after changes touching Dolt, its NAS config or its certs. It checks: healthy; TLS
-verifies for `dolt.<domain>` on `HOST_IP` and `TAILSCALE_IP`; plaintext and remote `root` rejected; `beads` logs in over
+verifies for `dolt.<domain>` on the LAN and Tailscale addresses; plaintext and remote `root` rejected; `beads` logs in over
 verified TLS; init did not rerun; the NAS `servercfg/config.yaml` and `init/01-beads-user.sh` match `dolt/`.
 
 Its MySQL client is a pinned image run with `docker run --rm --network host`; it also does the TLS check

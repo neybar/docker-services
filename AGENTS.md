@@ -15,15 +15,16 @@ human docs: `README.md` (services, variables), `REBUILD.md` (fresh host), `docs/
 2. **Never use the deploy checkout** (`/home/jalance/Projects/docker-services`): no edits, no `git switch`, no
    commits there. Work in your own clone. A feature branch there pauses deploys, and switching it to a commit without
    `traefik-rules/` deletes the directory under the running Traefik.
-3. **Git.** This repo authorizes agents to commit and push feature branches from the neybar-bot fork and open PRs;
-   never push or merge master. After `gh pr create` and every push, run `gh pr checks <n> --watch` and confirm
+3. **Git.** This repo authorizes agents to commit and push feature branches and open PRs; never push or merge master.
+   Identity: when jalance is driving the session, push to `neybar/docker-services` as `neybar`; unattended work
+   started through an orchestrator (e.g. grokbot) pushes from the `neybar-bot` fork. Do not ask which. After `gh pr create` and every push, run `gh pr checks <n> --watch` and confirm
    `gh pr view <n> --json mergeStateStatus` is `CLEAN`; on failure read `gh run view <run> --log-failed`, fix, push,
    watch again. Never call a PR ready while a check fails or is pending. Before post-merge cleanup, confirm
    `gh pr view <n> --json state` is `MERGED` (its exit code proves nothing).
-4. **Compose only as `./scripts/compose.sh <args>`**, never bare `docker compose`. Compose requires
-   `HOST_IP`/`TAILSCALE_IP` for every command (even `ps`); the wrapper derives them from the host
-   (`scripts/lib/host-addrs.sh`) and fails loudly if it cannot derive `HOST_IP` (no `0.0.0.0` fallback). Never put
-   them in `.env`.
+4. **Plain `docker compose`, no host addresses in compose.** No wrapper script: compose runs as `docker compose
+   <args>` from the checkout root. Do not bind a port to a host IP (LAN or Tailscale) or require one as a variable:
+   they belong to the host and change under it, and a stale one stops the service. Restrict access at the network
+   (no port forward, the tailnet ACL) and in the service (TLS, auth), not by bind address.
 5. **Every HTTP router uses a `chain-*@file` middleware**: `chain-authelia` (the default), `chain-no-auth` or
    `chain-basic-auth`. Each starts with `crowdsec@file`, so a router without one bypasses the WAF (and usually
    Authelia). The only intended exception is `http-catchall` (redirect to HTTPS, no backend). Never remove
@@ -49,11 +50,10 @@ human docs: `README.md` (services, variables), `REBUILD.md` (fresh host), `docs/
 | `task-scheduler/` | cron container: schedule in its `Dockerfile`, jobs in `task-scheduler/scripts/` (cleanup 00:00, log rotation 00:10, Dolt certs 00:20, Plex restart Sun 03:00) |
 | `dolt/` | Dolt templates, `dolt/README.md`, `dolt/RESTORE.md` |
 | `kometa/config.yml.example` | Kometa template (live copy on the NAS) |
-| `scripts/compose.sh` | compose wrapper (hard rule 4) |
 | `scripts/deploy.sh` | the deploy, run by `deploy.yml` from the deploy checkout |
 | `scripts/validate-traefik.sh`, `scripts/validate-waf.sh`, `scripts/validate-dolt.sh` | live-stack checks |
 | `scripts/dolt-add-db.sh`, `scripts/dolt-prebackup.sh` | new Beads database; nightly Dolt backup (jalance's crontab) |
-| `scripts/lib/` | `host-addrs.sh`, `nvme-paths.sh` (`NVME_PATHS`), `dolt-nas.sh`, `validate-common.sh` (shared helpers; `.shellcheckrc` lets ShellCheck follow its `source`) |
+| `scripts/lib/` | `host-addrs.sh` (validate test targets only), `nvme-paths.sh` (`NVME_PATHS`), `dolt-nas.sh`, `validate-common.sh` (shared helpers; `.shellcheckrc` lets ShellCheck follow its `source`) |
 | `scripts/ci/` | `integration-plan.sh`, `integration-run.sh`, and the `test-*.sh` run by `lint.yml` |
 | `.github/workflows/` | `lint.yml` (GitHub-hosted), `integration.yml` (trusted PRs on orcrist, read-only), `deploy.yml` |
 
@@ -61,7 +61,7 @@ human docs: `README.md` (services, variables), `REBUILD.md` (fresh host), `docs/
 
 | You changed | Run |
 |---|---|
-| `docker-compose.yml` | `./scripts/compose.sh config --quiet`, then `./scripts/validate-traefik.sh` (always) |
+| `docker-compose.yml` | `docker compose config --quiet`, then `./scripts/validate-traefik.sh` (always) |
 | Traefik, CrowdSec, `traefik-rules/`, `crowdsec-config/`, `plugins-local/`, the chains | `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh` |
 | Dolt, `dolt/`, its NAS config or certs | `./scripts/validate-dolt.sh` |
 | NVMe mounts or `scripts/lib/nvme-paths.sh` | `./scripts/ci/test-nvme-paths.sh` |
@@ -100,10 +100,10 @@ elsewhere skip them and say so in the PR. `integration.yml` runs them for truste
 - `crowdsec@file` is in `traefik-rules/crowdsec.yml` on purpose (as a label it 404s every chain until Traefik is
   healthy).
 - `traefik-rules/` is not watched: `deploy.sh` restarts traefik when it changed; by hand,
-  `./scripts/compose.sh restart traefik`.
+  `docker compose restart traefik`.
 - The plugin **fails open** on purpose (LAPI or AppSec down: traffic passes; Authelia is still the auth layer). Keep it.
 - A wrong or unregistered bouncer key is an **outage** (403 on every chained router); an empty key fails closed.
-  `cscli bouncers delete traefik` deletes the live bouncer too: run `./scripts/compose.sh restart crowdsec` right
+  `cscli bouncers delete traefik` deletes the live bouncer too: run `docker compose restart crowdsec` right
   after. Rotation: `REBUILD.md` §7.
 - `DISABLE_SCENARIOS` is deliberate. Do not re-enable `crowdsec-appsec-outofband` or add `crs-inband` casually.
 - CrowdSec has no Docker API access: keep it off `socket_proxy`. Socket-proxy `EXEC` stays off.
@@ -120,12 +120,14 @@ elsewhere skip them and say so in the PR. `integration.yml` runs them for truste
   and do not loosen its directory mode (700).
 
 **Dolt** ([dolt/README.md](dolt/README.md))
-- `:3307` on `$HOST_IP` and `$TAILSCALE_IP` only, never `0.0.0.0`. TLS required, no Traefik.
-- A template change deploys only after the NAS copy is updated and `./scripts/compose.sh restart dolt` (hard rule 8).
+- Goal: zero outside access. `:3307` is published on every host address; the router does not forward it, and
+  off-LAN clients come in only over Tailscale or VPN (the tailnet ACL decides which). TLS required, no Traefik.
+- A template change deploys only after the NAS copy is updated and `docker compose restart dolt` (hard rule 8).
 - New Beads database: `./scripts/dolt-add-db.sh <prefix>`. Never give `beads` a `*.*` grant.
 
-**Pi-hole** ([REBUILD.md](REBUILD.md) §2): cold standby (NextDNS serves live DNS). v6 reads only `FTLCONF_*` env vars;
-v5-style vars are silently ignored. Binds `:53` on `$HOST_IP` only.
+**Host DNS** ([REBUILD.md](REBUILD.md) §2): NextDNS serves live DNS; there is no local DNS server. Tailscale manages
+the host's DNS through systemd-resolved, so its stub listener (`127.0.0.53:53`) stays enabled: nothing in compose may
+publish `:53`.
 
 ## Beads in this repo
 

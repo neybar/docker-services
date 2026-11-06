@@ -2,14 +2,14 @@
 #
 # Dolt (Beads) Validation Script
 # Validates the Dolt sql-server: healthy, TLS-only with a certificate that verifies for dolt.<domain>
-# on both published addresses, beads can log in, remote root cannot, init did not rerun, and the live
+# on the LAN and Tailscale addresses, beads can log in, remote root cannot, init did not rerun, and the live
 # config on the NAS matches the templates in dolt/.
 #
 # Usage: ./scripts/validate-dolt.sh [domain]
 # If domain is not provided, reads from .env file
 #
 # Notes:
-#   - HOST_IP and TAILSCALE_IP are derived from the host (scripts/lib/host-addrs.sh), not read from .env.
+#   - Dolt publishes on every host address; this tests the LAN and Tailscale ones (scripts/lib/host-addrs.sh).
 #   - The NAS check only reads /mnt/docker/dolt (DOLT_NAS_DIR); it never copies.
 #   - Run on this host. The MySQL client is the pinned image MYSQL_IMAGE, run with
 #     `docker run --rm --network host` (pulled on first use); nothing is installed on the host.
@@ -129,7 +129,7 @@ for target in "LAN:${HOST_IP}" "Tailscale:${TAILSCALE_IP}"; do
     ip=${target#*:}
     if [[ "$label" == Tailscale && "${TAILSCALE_UP:-1}" != 1 ]]; then
         echo ""
-        print_result "Tailscale address (tailscaled unavailable; Dolt is LAN-only until the next deploy)" "WARN"
+        print_result "Tailscale address (tailscaled unavailable: not tested)" "WARN"
         section=$((section + 1))
         continue
     fi

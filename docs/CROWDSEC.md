@@ -97,15 +97,15 @@ other containers' env). Brute force on Authelia is covered by Authelia's own `re
 ## Operate
 
 ```bash
-./scripts/compose.sh exec crowdsec cscli decisions list
-./scripts/compose.sh exec crowdsec cscli alerts list
-./scripts/compose.sh exec crowdsec cscli metrics show appsec
-./scripts/compose.sh exec crowdsec cscli decisions delete --ip <ip>   # unban; takes effect within ~60s (stream refresh)
+docker compose exec crowdsec cscli decisions list
+docker compose exec crowdsec cscli alerts list
+docker compose exec crowdsec cscli metrics show appsec
+docker compose exec crowdsec cscli decisions delete --ip <ip>   # unban; takes effect within ~60s (stream refresh)
 ```
 
 **Stale `traefik@<ip>` bouncers** (one is added each time Traefik connects from a new IP): `cscli bouncers delete
 traefik` removes `traefik` **and every `traefik@<ip>`, including the live one**, so follow it immediately with
-`./scripts/compose.sh restart crowdsec`, which re-registers `traefik` from the secret. Until then the key is
+`docker compose restart crowdsec`, which re-registers `traefik` from the secret. Until then the key is
 unregistered (`cscli bouncers list` is empty) and every chained router returns 403 (see the bouncer key above): an
 outage.
 
@@ -134,7 +134,7 @@ and the routers for services outside compose (`homebridge.yml`, `synology.yml`).
   Unwatched, Traefik keeps what it loaded at start, and rule changes go live on merge: `deploy.sh` runs
   `docker compose restart traefik` when anything in `traefik-rules/` is newer than Traefik's last start (`up -d` alone
   would not recreate traefik), so rules from a failed deploy or a commit made without a restart are applied on the next
-  deploy. By hand: `./scripts/compose.sh restart traefik`. The restart also re-binds the mount. Cost: ~2s connection
+  deploy. By hand: `docker compose restart traefik`. The restart also re-binds the mount. Cost: ~2s connection
   refused per rules deploy.
 - **Never switch the deploy checkout to a commit without `traefik-rules/`** (old tags, history before the WAF): it
   deletes the directory, and if Traefik starts meanwhile docker recreates it empty and root-owned, so Traefik comes up

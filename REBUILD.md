@@ -18,12 +18,10 @@ Start here, because these are the things a fresh host will not have and
 |---|---|---|
 | 10 CIFS mounts (`/mnt/*`) | `/etc/fstab` | **not captured** — template below |
 | CIFS credentials | `/etc/cifspwd` (root, `0600`) | **secret, never commit** |
-| `DNSStubListener=no` | `/etc/systemd/resolved.conf` | **not captured** — needed for Pi-hole |
 | Plex library database | `$NVME_DIR/plex/config` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
-| `tailscaled` before dolt | systemd | **not enforced**: if `tailscaled` is down when dolt starts, Docker cannot bind `$TAILSCALE_IP` and dolt does not start; `./scripts/compose.sh up -d dolt` once it is up. While it is down, compose and deploys still run (the helper warns and binds dolt to `127.0.0.1` instead, LAN still works); re-deploy once it is back |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
 ---
@@ -39,42 +37,14 @@ Verified against the current host:
   `sqlite3` — both were missing on this host when they were first needed
 - A user whose `uid:gid` matches `PUID`/`PGID` in `.env` (currently `1026:100`)
 
-### Pi-hole needs port 53 free
+### Host DNS: leave systemd-resolved at its defaults
 
-Pi-hole binds host port 53, which collides with systemd-resolved's stub
-listener. Required:
-
-```
-# /etc/systemd/resolved.conf
-DNSStubListener=no
-```
-
-Then `sudo systemctl restart systemd-resolved`. Without this, the `pihole`
-container fails to bind and the stack comes up degraded. (It is already set on
-orcrist, so there is no conflict today.) Pi-hole binds `:53` on `$HOST_IP` only,
-not `0.0.0.0`.
-
-### Pi-hole (cold standby)
-
-- **Cold standby only.** NextDNS serves live DNS (host resolvers are
-  `45.90.28.234`/`45.90.30.234`) and nothing points at Pi-hole; it is kept in
-  case NextDNS is dropped.
-- It runs **v6**, which reads **only** `FTLCONF_<section>_<setting>` env vars.
-  All v5-style vars (`WEBPASSWORD`, `DNS1`, `ServerIP`, `PUID`/`PGID`,
-  `CONDITIONAL_FORWARDING*`, …) are silently ignored. `PUID`/`PGID` in
-  particular are a LinuxServer.io convention the official image does not
-  implement: it starts as root and FTL drops to its own `pihole` user (uid 1000).
-- The live config is `pihole.toml`, which is **gitignored** (under
-  `$LOCALDOCKERDIR/pihole`), so the settings that matter are restated as
-  `FTLCONF_*` in compose to keep them reproducible. Settings supplied via env
-  become read-only in the web UI.
-- FTL's long-term query database is off (`FTLCONF_database_maxDBdays: "0"`): it
-  had reached 1.46GB on the old (since failed) /home SSD and corrupted itself
-  with unreadable pages. `gravity.db` (the blocklist, ~86k domains, refreshed by
-  in-container cron Sundays 04:26) is what makes the standby usable; keep that one.
-- v6 logs to the `/var/log/pihole/` **directory**, and those logs are not
-  persisted. The old single-file `pihole.log` bind mount was a v5 path and did
-  nothing.
+NextDNS serves live DNS (host resolvers are `45.90.28.234`/`45.90.30.234`); there
+is no local DNS server in the stack. Keep `/etc/systemd/resolved.conf` at the
+Ubuntu defaults, with the stub listener on (`127.0.0.53:53`): Tailscale manages
+the host's DNS through systemd-resolved. With `DNSStubListener=no` (once needed
+because Pi-hole held `:53`) local lookups failed. Nothing in compose may publish
+`:53`.
 
 ---
 
@@ -225,7 +195,7 @@ git clone <repo> && cd docker-services
 cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY and DOLT_BEADS_PASSWORD, see below)
 # restore $NVME_DIR/plex/config (default /usr/local/docker/plex/config) from backup FIRST (see §5)
 touch acme/acme.json && chmod 600 acme/acme.json
-./scripts/compose.sh up -d   # derives HOST_IP and TAILSCALE_IP; never bare `docker compose` (see below)
+docker compose up -d
 ./scripts/validate-traefik.sh
 ./scripts/validate-waf.sh
 ./scripts/validate-dolt.sh
@@ -233,26 +203,17 @@ touch acme/acme.json && chmod 600 acme/acme.json
 
 `acme.json` must be `0600` or Traefik refuses to use it.
 
-### Host addresses (`HOST_IP`, `TAILSCALE_IP`)
+### Host addresses
 
-Not in `.env`. `scripts/lib/host-addrs.sh` derives them at every compose run (`scripts/compose.sh`, `deploy.sh`,
-`scripts/ci/integration-run.sh`, the validate and `dolt-*` scripts), and compose refuses every command without them:
-
-- `HOST_IP`: the `src` of the IPv4 default route in the main routing table (else the first global address on that
-  route's interface). The main table, not `ip route get`, because a Tailscale exit node would route that over
-  `tailscale0`. The host must have exactly one IPv4 default route; with two, it fails instead of guessing. On orcrist the
-  address is a DHCP lease on `enp2s0f0`, so keep it reserved on the gateway: `dolt.<domain>` (via `orcrist.<domain>`)
-  points at it.
-- `TAILSCALE_IP`: `tailscale ip -4`. Optional: if `tailscaled` is down or logged out, it is `127.0.0.1` with a warning
-  and Dolt is LAN-only until the next deploy after Tailscale is back. Nothing else uses it.
-
-If `HOST_IP` cannot be derived, the run fails with the reason. There is no fallback to `0.0.0.0`.
+None in `.env` or compose (`AGENTS.md` hard rule 4): Dolt publishes `:3307` on every host address. On orcrist the LAN
+address is a DHCP lease on `enp2s0f0`; keep it reserved on the gateway, because `dolt.<domain>` (via
+`orcrist.<domain>`) points at it. A changed address breaks that DNS record, not the stack.
 
 ### Dolt (Beads)
 
-Background is in `dolt/README.md`. Do steps 1-3 before `./scripts/compose.sh up -d`.
+Background is in `dolt/README.md`. Do steps 1-3 before `docker compose up -d`.
 
-1. In `.env`, set `DOLT_BEADS_PASSWORD` (`openssl rand -hex 32`, hex only). Compose refuses to render without it. `tailscaled` must be up (see Host addresses above).
+1. In `.env`, set `DOLT_BEADS_PASSWORD` (`openssl rand -hex 32`, hex only). Compose refuses to render without it.
 2. Stage the NAS config from the templates. Every subpath must exist, because compose mounts each one:
    ```bash
    mkdir -p /mnt/docker/dolt/servercfg /mnt/docker/dolt/init /mnt/docker/dolt/certs /mnt/docker/dolt/backups
@@ -276,13 +237,13 @@ Background is in `dolt/README.md`. Do steps 1-3 before `./scripts/compose.sh up 
    On first start crowdsec installs the hub collections (needs internet) and registers with CAPI.
 3. Nothing to create for Traefik's dynamic config: the chains (each starting with `crowdsec@file`), the `middlewares-*`, `crowdsec@file`
    and the Synology/Homebridge routers are all in `traefik-rules/`, mounted read-only at `/rules`. Not watched (it is the git checkout): `deploy.sh`
-   restarts traefik when anything in `traefik-rules/` is newer than its last start; after a hand edit, `./scripts/compose.sh restart traefik`.
+   restarts traefik when anything in `traefik-rules/` is newer than its last start; after a hand edit, `docker compose restart traefik`.
    Traefik no longer uses the NFS `/mnt/docker/traefik3` volume.
 4. A Traefik restart costs ~2s of connection refused, with no 404s and no `does not exist` errors, because the middleware is in the file provider and exists as soon as Traefik loads. (As labels it did not exist until the traefik container turned `healthy`: the docker provider skips unhealthy containers, itself included, so the chains 404ed for ~2-4.5s.)
 5. Run `./scripts/validate-traefik.sh` and `./scripts/validate-waf.sh`. Banned IPs pass for ~60s after a Traefik start (`streamStartupBlock=false`).
 
 Bouncer key rotation: the key only registers when no `traefik` bouncer exists in `$LOCALDOCKERDIR/crowdsec/data`. To rotate:
-Every chained router returns 403 from the delete until the recreate below (an outage), so run the steps back to back: `./scripts/compose.sh exec crowdsec cscli bouncers delete traefik` (this also deletes every auto-created `traefik@<ip>` entry; CrowdSec refuses to delete those on their own), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `./scripts/compose.sh up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
+Every chained router returns 403 from the delete until the recreate below (an outage), so run the steps back to back: `docker compose exec crowdsec cscli bouncers delete traefik` (this also deletes every auto-created `traefik@<ip>` entry; CrowdSec refuses to delete those on their own), update `CROWDSEC_BOUNCER_KEY` (must not be empty: an empty key fails closed and breaks every chained router), `docker compose up -d --force-recreate crowdsec traefik` (forces both to re-read the secret rather than relying on compose detecting the change),
 run `./scripts/validate-waf.sh`. Unreadable request bodies (HTTP/2/3 POST/PUT/PATCH/DELETE without Content-Length) are blocked, not passed; GET/HEAD go to AppSec header-only and pass (`crowdsecAppsecUnreadableBodyBlock=true`, the plugin default). A key mismatch is not a silent fail-open: a wrong or unregistered key blocks every chained router with 403 (the LAPI stream fails open, but AppSec answers an unknown key with 401, and the plugin blocks on any AppSec error other than 500/502/503/504/unreachable). `validate-waf.sh` detects it (the normal-page check fails).
 
 Docker access: none. CrowdSec does not read Authelia logs: the only way without a log file was Docker API access, which cannot be scoped below
