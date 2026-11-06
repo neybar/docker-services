@@ -15,8 +15,9 @@ human docs: `README.md` (services, variables), `REBUILD.md` (fresh host), `docs/
 2. **Never use the deploy checkout** (`/home/jalance/Projects/docker-services`): no edits, no `git switch`, no
    commits there. Work in your own clone. A feature branch there pauses deploys, and switching it to a commit without
    `traefik-rules/` deletes the directory under the running Traefik.
-3. **Git.** This repo authorizes agents to commit and push feature branches from the neybar-bot fork and open PRs;
-   never push or merge master. After `gh pr create` and every push, run `gh pr checks <n> --watch` and confirm
+3. **Git.** This repo authorizes agents to commit and push feature branches and open PRs; never push or merge master.
+   Identity: when jalance is driving the session, push to `neybar/docker-services` as `neybar`; unattended work
+   started through an orchestrator (e.g. grokbot) pushes from the `neybar-bot` fork. Do not ask which. After `gh pr create` and every push, run `gh pr checks <n> --watch` and confirm
    `gh pr view <n> --json mergeStateStatus` is `CLEAN`; on failure read `gh run view <run> --log-failed`, fix, push,
    watch again. Never call a PR ready while a check fails or is pending. Before post-merge cleanup, confirm
    `gh pr view <n> --json state` is `MERGED` (its exit code proves nothing).
