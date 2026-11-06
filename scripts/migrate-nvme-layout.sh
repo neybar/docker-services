@@ -8,7 +8,7 @@
 #
 # --apply, in order, refusing before it stops anything if a check fails:
 #   - must be root; every target must be missing or an empty directory; source and target on the same filesystem
-#   - stops the services with data to move (./scripts/compose.sh stop, from DEPLOY_DIR)
+#   - stops the services with data to move (docker compose stop, from DEPLOY_DIR)
 #   - per source: counts entries and bytes, mv (a rename), leaves a symlink at the legacy path so the compose file
 #     that is deployed now keeps working until the new one is, re-counts and compares (stops on a mismatch, leaving
 #     the services stopped)
@@ -26,7 +26,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="${DEPLOY_DIR:-/home/jalance/Projects/docker-services}"
-COMPOSE="${NVME_COMPOSE:-$DEPLOY_DIR/scripts/compose.sh}"
+COMPOSE="${NVME_COMPOSE:-}"
 
 # shellcheck source=lib/nvme-paths.sh
 source "$SCRIPT_DIR/lib/nvme-paths.sh"
@@ -178,7 +178,11 @@ if [[ "$EUID" -ne 0 && "${NVME_MIGRATE_ALLOW_NONROOT:-}" != 1 ]]; then
 fi
 
 compose() {
-    (cd "$DEPLOY_DIR" && "$COMPOSE" "$@")
+    if [[ -n "$COMPOSE" ]]; then
+        (cd "$DEPLOY_DIR" && "$COMPOSE" "$@")
+    else
+        (cd "$DEPLOY_DIR" && docker compose "$@")
+    fi
 }
 
 on_exit() {

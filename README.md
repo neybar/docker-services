@@ -29,7 +29,6 @@ Self-hosted services running on Docker Compose behind Traefik with a CrowdSec WA
 | Collection Mgmt | Kometa | internal only (no web UI) |
 | Books | Calibre-Web | `books.$DOMAINNAME` |
 | Books | Lazy Librarian | `lazylib.$DOMAINNAME` |
-| DNS | Pi-hole (cold standby) | `pihole.$DOMAINNAME/admin/`; DNS on `$HOST_IP:53` only |
 | Home Automation | Home Assistant | `homeassistant.$DOMAINNAME` |
 | Utilities | iSponsorBlockTV | internal only |
 | Utilities | LibreSpeed | `speedtest.$DOMAINNAME` |
@@ -54,18 +53,14 @@ Key variables:
 | `CLOUDFLARE_DNS_API_TOKEN` | DNS challenge token from the "Edit zone DNS" template, scoped to `DOMAINNAME`'s zone only (below). Reaches Traefik as the compose secret `cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`). Never the Global API Key |
 | `CLOUDFLARE_ZONEID` | Zone ID (not referenced by compose) |
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
-| `LOCALDOCKERDIR` | The repo checkout (`/home/jalance/Projects/docker-services`, on the /home SATA SSD; `REBUILD.md` §5). Holds the gitignored local state: `acme/`, `crowdsec/`, `traefik-logs/`, `pihole/` |
+| `LOCALDOCKERDIR` | The repo checkout (`/home/jalance/Projects/docker-services`, on the /home SATA SSD; `REBUILD.md` §5). Holds the gitignored local state: `acme/`, `crowdsec/`, `traefik-logs/` |
 | `NVME_DIR` | Optional. Parent of the local NVMe paths `$NVME_DIR/<service>/<role>` (default `/usr/local/docker`, on `/`; `REBUILD.md` §5). Not `LOCALDOCKERDIR` |
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `CROWDSEC_BOUNCER_KEY` | Traefik↔CrowdSec bouncer key (`openssl rand -hex 32`). Passed to both as the compose secret `crowdsec_bouncer_key`; CrowdSec registers it as bouncer `traefik` ([docs/CROWDSEC.md](docs/CROWDSEC.md)) |
 | `DOLT_BEADS_PASSWORD` | Password for the Dolt user `beads` (`openssl rand -hex 32`, hex only). Compose secret `dolt_beads_password`, not a container env var |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa; from Plex account settings) |
 | `TMDB_API_READ_ACCESS_TOKEN` | TMDb v4 read token (used by Kometa) |
-| `HOST_IP` | **Not in `.env`**: derived at every compose run by `scripts/lib/host-addrs.sh` (source address of the main table's IPv4 default route; exactly one default route required). The only address Pi-hole binds `:53` and Dolt `:3307` on; also used for local resolution by the validate scripts |
-| `TAILSCALE_IP` | **Not in `.env`**: derived the same way, from `tailscale ip -4`. Optional: if it cannot be derived it is `127.0.0.1` with a warning, so deploys still run and Dolt is LAN-only until the next deploy after `tailscaled` is back. Only Dolt uses it |
-
-The derived `HOST_IP`/`TAILSCALE_IP` override any left in `.env`, and the helper warns while `.env` still sets them.
-Details: `REBUILD.md` §7, Host addresses.
+No host addresses (LAN or Tailscale IP) are in `.env` or compose: no service binds one (`AGENTS.md` hard rule 4).
 
 #### Cloudflare DNS token (`CLOUDFLARE_DNS_API_TOKEN`)
 
@@ -91,7 +86,7 @@ curl -s -H "Authorization: Bearer $T" https://api.cloudflare.com/client/v4/zones
 
 Compose refuses to start if the variable is empty. The token reaches Traefik as the compose secret
 `cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`), not as an env var. A bad token does not show up at startup,
-only as a failed renewal in `./scripts/compose.sh logs traefik`.
+only as a failed renewal in `docker compose logs traefik`.
 
 ### 2. Docker Networks
 
@@ -129,11 +124,8 @@ After first start: Settings → Environments → Add Environment → Docker → 
 ### 6. Start Everything
 
 ```bash
-./scripts/compose.sh up -d
+docker compose up -d
 ```
-
-Use `./scripts/compose.sh` instead of `docker compose` for every compose command: it derives `HOST_IP` and
-`TAILSCALE_IP` from the host first, and compose refuses to run without them.
 
 ## Maintenance
 
@@ -152,7 +144,6 @@ Task Scheduler handles routine maintenance automatically:
 - **Kometa**: runs daily at 1 AM; reads `PLEX_TOKEN` and `TMDB_API_READ_ACCESS_TOKEN` from the env; config at
   `/mnt/docker/kometa/config.yml` (template `kometa/config.yml.example`).
 - **Home Assistant**: privileged, host network (needed for device access).
-- **Pi-hole**: cold standby, v6 (`FTLCONF_*` env vars only); see `REBUILD.md` §2.
 - **NZBHydra2**: its H2 database is on the local NVMe, not NFS (`REBUILD.md` §5).
 - **Logging**: every container uses `*default-logging` (json-file, 10MB max, 3 files). Application logs on NFS rotate
   themselves; do not add an external logrotate. Exception: Traefik's access log (`REBUILD.md` §7).

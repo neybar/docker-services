@@ -37,7 +37,7 @@ dolt_nas_drift() {
         echo "    cp dolt/$f $nas/$f"
     done
     if [[ "$restart" == true ]]; then
-        echo "  Dolt reads its config only at start: ./scripts/compose.sh restart dolt"
+        echo "  Dolt reads its config only at start: docker compose restart dolt"
     else
         echo "  The init script runs only on a first start; no restart needed."
     fi

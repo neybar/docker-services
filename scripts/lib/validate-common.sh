@@ -2,8 +2,8 @@
 #
 # Shared helpers for scripts/validate-*.sh. Source it, do not run it.
 #
-# Caller contract: set PROJECT_DIR before calling load_env, then call load_env "$@" (sets DOMAIN, exports HOST_IP and
-# TAILSCALE_IP), print_banner "<title>", and finish with print_summary. Provides colors, the PASSED/FAILED/WARNINGS
+# Caller contract: set PROJECT_DIR before calling load_env, then call load_env "$@" (sets DOMAIN, HOST_IP, TAILSCALE_IP
+# and TAILSCALE_UP), print_banner "<title>", and finish with print_summary. Provides colors, the PASSED/FAILED/WARNINGS
 # counters, print_result and the curl_resolved/curl_status helpers. The caller keeps its own `set -uo pipefail`.
 
 # shellcheck source=host-addrs.sh
@@ -39,14 +39,16 @@ load_env() {
         exit 1
     fi
 
-    # HOST_IP and TAILSCALE_IP are derived from the host, as for every compose run (host-addrs.sh); `docker compose`
-    # in the validate scripts needs both. HOST_IP is also used for local resolution (bypasses public DNS, enables
-    # Authelia local bypass).
-    if ! host_addrs_export "$PROJECT_DIR"; then
-        echo -e "${RED}Error: cannot derive HOST_IP (above)${NC}"
+    # Test targets, looked up from the host (host-addrs.sh); compose does not use them. HOST_IP is used for local
+    # resolution (bypasses public DNS, enables Authelia local bypass). TAILSCALE_UP=0 when tailscaled is unavailable.
+    if ! HOST_IP=$(host_ip); then
+        echo -e "${RED}Error: cannot find this host's LAN address (above)${NC}"
         exit 1
     fi
-    echo -e "${GREEN}Using local resolution: ${HOST_IP} (Tailscale ${TAILSCALE_IP})${NC}"
+    TAILSCALE_UP=1
+    TAILSCALE_IP=$(tailscale_ip) || TAILSCALE_UP=0
+    export HOST_IP TAILSCALE_IP TAILSCALE_UP  # read by the calling validate script
+    echo -e "${GREEN}Using local resolution: ${HOST_IP} (Tailscale ${TAILSCALE_IP:-unavailable})${NC}"
 }
 
 # curl against <host>:<port>, pointing the connection at HOST_IP when set (local resolution) and ignoring TLS
