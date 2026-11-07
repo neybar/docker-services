@@ -270,6 +270,14 @@ Used for real on 2026-11-07 (restic 0.16.4):
 - `--one-file-system` keeps the NAS mounts out of `/`. A NAS path is backed up
   only when listed by itself (`/mnt/docker/dolt/backups`).
 
+Restore last tested: 2026-11-07, snapshot `f5c09f96` (`restic restore latest`
+with `--include` for the Plex `Databases` dir, `nzbhydra2/database`,
+`/mnt/docker/dolt/backups`, `/etc/restic`, the jalance crontab and
+`/var/lib/tailscale`, into a scratch dir on `/`). 3.4 GiB in about 70s; all
+paths present, the Dolt `native/ds` generation non-empty, `restic check` clean.
+Stock `sqlite3` cannot run `PRAGMA integrity_check` on the Plex DBs (custom
+tokenizer and collations), so use Plex's own SQLite for that.
+
 #### What is excluded (`/etc/restic/excludes`)
 
 Regenerable: `/var/lib/docker`, `/var/lib/containerd`, `/opt/containerd`,
