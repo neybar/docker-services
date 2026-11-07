@@ -12,8 +12,9 @@ A merge to `master` updates the running stack on orcrist. Nothing else deploys.
    `/home/jalance/Projects/docker-services`. It does not use `actions/checkout`, because that
    directory holds `.env` and the gitignored service data. The script:
    - refuses to run unless the checkout is on `master` with no tracked modifications (untracked files are fine)
-   - fetches `master` over HTTPS and fast-forwards (`--ff-only`) to exactly `$GITHUB_SHA`. If HEAD
-     already contains that commit (a newer one is deployed), it exits without doing anything.
+   - fetches `master` over HTTPS and fast-forwards (`--ff-only`) to exactly the target: `$DEPLOY_SHA`, else
+     `$GITHUB_SHA`, else the tip of `master` (see [Overrides](#overrides)). If HEAD already contains that commit
+     (a newer one is deployed), it exits without doing anything.
    - refuses to deploy if Dolt's live NAS config differs from `dolt/` (`scripts/lib/dolt-nas.sh`, read-only), or if
      NVMe data is still at a legacy path while its `$NVME_DIR` path is missing or empty (`nvme_layout_check` in
      `scripts/lib/nvme-paths.sh`; fix: `sudo ./scripts/migrate-nvme-layout.sh --apply`). All run before any container
@@ -34,6 +35,23 @@ The script runs from the deploy checkout, so each deploy executes the `deploy.sh
 ships it.
 
 Working on a feature branch in the deploy checkout pauses auto-deploys: `deploy.sh` exits unless the checkout is on `master`. Switch back to `master` before merging. Never switch it to a commit without `traefik-rules/` ([CROWDSEC.md](CROWDSEC.md), Traefik file rules). Agents never use the deploy checkout: they work in their own clone.
+
+### Overrides
+
+`deploy.yml` sets neither variable below. They are for a different caller of `deploy.sh` (the private deploy workflow,
+whose `GITHUB_SHA` is a commit of the private repo and does not exist here) and for drills.
+
+- `DEPLOY_SHA`: the commit to deploy. Wins over `GITHUB_SHA`; empty counts as unset. The target is chosen by
+  `deploy_resolve_target` in `scripts/lib/deploy-target.sh`, which refuses any commit that is not an ancestor of the
+  fetched `master`, whichever variable named it. `scripts/ci/test-deploy-target.sh` tests this.
+- `DEPLOY_REPO_URL`: where to fetch `master` from (default `https://github.com/neybar/docker-services.git`). The fetch
+  writes the checkout's `refs/remotes/origin/master`, so the "is it on master" guard then checks **that repo's**
+  `master`, and its code runs as root. Set it only to a repo you control. The checkout's `origin` remote
+  is never changed (the URL is passed to `git fetch` directly); the next deploy without the variable refetches the
+  default `master` over the same ref. `deploy.sh` prints a `NOTE` to stderr when it is set.
+
+A change to `deploy.sh` or `scripts/lib/deploy-target.sh` takes effect on the **second** deploy after it merges, as
+above. Merge changes to these before anything that depends on them.
 
 To run a deploy by hand: `./scripts/deploy.sh` (deploys the tip of `master`), or use
 **Actions > Deploy > Run workflow** on `master`.

@@ -46,6 +46,10 @@ jobs:
       - name: Test nvme-paths.sh
         run: ./scripts/ci/test-nvme-paths.sh
 
+      # deploy.sh target selection (DEPLOY_SHA > GITHUB_SHA > origin/master) and the on-master guard, on a temp repo.
+      - name: Test deploy target selection
+        run: ./scripts/ci/test-deploy-target.sh
+
       # AGENTS.md size cap, CLAUDE.md/GEMINI.md pointers, named repo paths, bd generated-block markers.
       - name: Test agent docs
         run: ./scripts/ci/test-agent-docs.sh

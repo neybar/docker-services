@@ -55,7 +55,7 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 | `scripts/deploy.sh` | the deploy, run by `deploy.yml` from the deploy checkout |
 | `scripts/validate-traefik.sh`, `scripts/validate-waf.sh`, `scripts/validate-dolt.sh` | live-stack checks |
 | `scripts/dolt-add-db.sh`, `scripts/dolt-prebackup.sh` | new Beads database; nightly Dolt backup (jalance's crontab) |
-| `scripts/lib/` | `host-addrs.sh` (validate test targets only), `nvme-paths.sh` (`NVME_PATHS`), `dolt-nas.sh`, `validate-common.sh` (`.shellcheckrc` follows its `source`) |
+| `scripts/lib/` | `host-addrs.sh` (validate test targets only), `nvme-paths.sh` (`NVME_PATHS`), `dolt-nas.sh`, `deploy-target.sh` (deploy.sh target + on-master guard), `validate-common.sh` (`.shellcheckrc` follows its `source`) |
 | `scripts/ci/` | `integration-plan.sh`, `integration-run.sh`, the `test-*.sh` run by `lint.yml` |
 | `.github/workflows/` | `lint.yml` (GitHub-hosted), `integration.yml` (trusted PRs on orcrist, read-only), `deploy.yml` |
 
@@ -68,6 +68,7 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 | Dolt, `dolt/`, its NAS config or certs | `./scripts/validate-dolt.sh` |
 | NVMe mounts or `scripts/lib/nvme-paths.sh` | `./scripts/ci/test-nvme-paths.sh` |
 | `scripts/ci/integration-plan.sh` | `./scripts/ci/test-integration-plan.sh` |
+| `scripts/deploy.sh` target selection or `scripts/lib/deploy-target.sh` | `./scripts/ci/test-deploy-target.sh` |
 | any `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | `./scripts/ci/test-agent-docs.sh` |
 | any shell script | `shellcheck` (CI runs it at severity `info`) |
 
