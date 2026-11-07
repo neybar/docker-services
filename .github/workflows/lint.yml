@@ -50,6 +50,10 @@ jobs:
       - name: Test agent docs
         run: ./scripts/ci/test-agent-docs.sh
 
+      # Fixture repos: the nested AGENTS.md/CLAUDE.md/GEMINI.md checks pass on a good set and fail on each breakage.
+      - name: Test agent docs checker
+        run: ./scripts/ci/test-test-agent-docs.sh
+
   docker-compose:
     name: Docker Compose Validation
     runs-on: ubuntu-latest
