@@ -4,8 +4,13 @@
 # Run by .github/workflows/deploy.yml on the self-hosted runner; also safe to run by hand.
 #
 # Usage: ./scripts/deploy.sh
-#   DEPLOY_DIR  checkout to deploy into (default /home/jalance/Projects/docker-services)
-#   GITHUB_SHA  commit to deploy (set by Actions); defaults to the tip of master
+#   DEPLOY_DIR       checkout to deploy into (default /home/jalance/Projects/docker-services)
+#   DEPLOY_SHA       commit to deploy; wins over GITHUB_SHA (for a workflow whose GITHUB_SHA is not a commit of this repo)
+#   GITHUB_SHA       commit to deploy (set by Actions); defaults to the tip of master
+#   DEPLOY_REPO_URL  repo to fetch master from (default https://github.com/neybar/docker-services.git). Only the
+#                    local refs/remotes/origin/master ref follows it; the checkout's `origin` remote is never changed.
+#                    The master of that repo is then the one the on-master guard checks, so set it only to a repo you trust.
+#   Whatever the target, it must be an ancestor of the fetched master or the deploy is refused.
 #
 # Fast-forwards the checkout and runs `docker compose up -d --build --remove-orphans`, then restarts traefik
 # if traefik-rules/ changed since it started (Traefik does not watch it).
@@ -17,7 +22,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="${DEPLOY_DIR:-/home/jalance/Projects/docker-services}"
-REPO_URL="https://github.com/neybar/docker-services.git"
+REPO_URL="${DEPLOY_REPO_URL:-https://github.com/neybar/docker-services.git}"
 
 die() {
     echo "ERROR: $*" >&2
@@ -37,13 +42,13 @@ fi
 
 old=$(git rev-parse HEAD)
 
+[[ -z "${DEPLOY_REPO_URL:-}" ]] || echo "NOTE: fetching master from DEPLOY_REPO_URL=$REPO_URL, not the default repo" >&2
 # HTTPS so this works without SSH keys (the repo is public).
 git fetch --quiet "$REPO_URL" "+refs/heads/master:refs/remotes/origin/master"
 
-target=$(git rev-parse --verify "${GITHUB_SHA:-origin/master}^{commit}") \
-    || die "commit ${GITHUB_SHA:-origin/master} not found after fetch"
-git merge-base --is-ancestor "$target" origin/master \
-    || die "$target is not on master; refusing to deploy it"
+# shellcheck source=lib/deploy-target.sh
+source scripts/lib/deploy-target.sh
+target=$(deploy_resolve_target) || exit 1
 
 if [[ "$target" != "$old" ]] && git merge-base --is-ancestor "$target" "$old"; then
     echo "HEAD ($old) already contains $target; a newer commit is deployed. Nothing to do."
