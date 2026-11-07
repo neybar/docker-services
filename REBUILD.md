@@ -17,7 +17,7 @@ Start here, because these are the things a fresh host will not have and
 | Thing | Where it lives | Status |
 |---|---|---|
 | 10 CIFS mounts (`/mnt/*`) | `/etc/fstab` | **not captured** — template below |
-| CIFS credentials | `/etc/cifspwd` (root, `0600`) | **secret, never commit** |
+| CIFS credentials | `/etc/cifspwd` (root, `0600`) | **secret, never commit**. `.env` and every other secret: where each lives and how to regenerate it is in `secrets/INVENTORY.md` in the private `homelab-site` repo |
 | Plex library database | `$NVME_DIR/plex/config` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
@@ -405,7 +405,6 @@ Known gaps are tracked as Beads issues (database `ds`, `bd show <id>`), not here
 | Issue | Gap |
 |---|---|
 | `ds-nhh` | rebuild as code: Ansible roles, SOPS secrets, private site repo, DR drill |
-| `ds-oko` | Inventory every secret: location, consumer, regeneration, SOPS target |
 | `ds-hzh` | Synology-side configuration (shares, NFS exports, permissions) |
 | `ds-1uw` | Remaining SQLite configs (Sonarr, Radarr, …) off NFS onto `$NVME_DIR` (§5), not `LOCALDOCKERDIR`; hydra is the reference |
 | `ds-0lu` | DSM `home.<domain>` is TCP TLS passthrough, so the HTTP WAF cannot inspect it: host `cs-firewall-bouncer` + nftables (sudo) |
