@@ -55,7 +55,9 @@ flowchart LR
   layer; a wrong bouncer key blocks instead ([docs/CROWDSEC.md](docs/CROWDSEC.md)).
 - **Known exceptions.** The `:80` catch-all router only redirects to HTTPS (no backend). The NAS admin UI is behind TCP
   TLS-passthrough routers, which the HTTP WAF cannot inspect, and one NAS photo router has no chain; both are tracked
-  in [REBUILD.md](REBUILD.md) §8 (ds-0lu, ds-o9h).
+  in [REBUILD.md](REBUILD.md) §8 (ds-0lu, ds-o9h). The `plex` service also publishes its ports (including 32400)
+  straight to the host, and `homeassistant` runs with `network_mode: host`; both are reachable without Traefik,
+  CrowdSec or Authelia.
 - **No host addresses in compose.** Ports publish on every host address; access is limited by what the gateway
   forwards, the tailnet ACL, and TLS plus auth in each service ([AGENTS.md](AGENTS.md) hard rule 4).
 
