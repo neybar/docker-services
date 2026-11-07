@@ -9,6 +9,8 @@ is a symlink to it, Cursor reads it natively. Human docs: `README.md` (services,
 and a `GEMINI.md` symlink) add subtree-only rules. An agent may not load one until it works in that subtree, so a rule
 that can be broken from outside it stays here. `scripts/ci/test-agent-docs.sh` checks sizes and named paths.
 
+Significant architecture changes add or supersede an ADR in `docs/decisions/` in the same PR.
+
 ## Hard rules
 
 1. **A merge to `master` is a live deploy** on orcrist (`.github/workflows/deploy.yml` runs `scripts/deploy.sh`).
