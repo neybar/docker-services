@@ -14,7 +14,8 @@ that can be broken from outside it stays here. `scripts/ci/test-agent-docs.sh` c
 1. **A merge to `master` is a live deploy** on orcrist (`.github/workflows/deploy.yml` runs `scripts/deploy.sh`).
    Docker access is root on the host: compose changes, `build:` contexts and workflow edits run as root.
 2. **Never use the deploy checkout** (`/home/jalance/Projects/docker-services`): no edits, `git switch` or commits; use
-   your own clone. A branch there pauses deploys; a commit without `traefik-rules/` deletes it under the live Traefik.
+   your own clone. A branch there pauses deploys; switching it to a commit without `traefik-rules/` deletes that directory under the
+   live Traefik.
 3. **Git.** Agents may commit, push feature branches and open PRs; never push or merge master. With jalance driving,
    push to `neybar/docker-services` as `neybar`; unattended orchestrator work (e.g. grokbot) pushes from the
    `neybar-bot` fork. Do not ask which. After `gh pr create` and every push, run `gh pr checks <n> --watch` and
@@ -85,7 +86,7 @@ and say so in the PR (`integration.yml` runs them for trusted PRs). `scripts/ci/
   `cscli bouncers delete traefik` deletes the live bouncer too: `docker compose restart crowdsec` right after.
   Rotation: `REBUILD.md` §7.
 - Compose: keep `DISABLE_SCENARIOS` (never re-enable `crowdsec-appsec-outofband` or add `crs-inband` casually).
-  CrowdSec gets no Docker API access (off `socket_proxy`); socket-proxy `EXEC` stays off.
+  CrowdSec gets no Docker API access (keep it off `socket_proxy`); socket-proxy `EXEC` stays off.
 
 **Storage** (`REBUILD.md` §5-6)
 - NFS (Synology) for configs and media. Local NVMe: `$NVME_DIR/<service>/<role>` (default `/usr/local/docker`, on
@@ -104,9 +105,11 @@ listener (`127.0.0.53:53`), so nothing in compose may publish `:53`.
 
 ## Beads in this repo
 
-This section beats the generated blocks below: the issue database is **not** local or synced through git (ignore
-their "local Dolt DB" / `refs/dolt/data` lines; never run `bd dolt push`), and git follows hard rule 3, not their
-conservative profile. `bd setup codex` / `bd setup claude` write them: never edit between their markers.
+This section beats the generated Codex block below: the issue database is **not** local or synced through git (ignore
+its "local Dolt DB" / `refs/dolt/data` line; never run `bd dolt push`), and git follows hard rule 3. `bd setup codex`
+writes the block: never edit between its markers. The Claude block is removed on purpose (the SessionStart hook in
+`.claude/settings.json` runs `bd prime`): `bd setup claude` would re-add it, so never rerun it. `--check` is safe (its
+"no beads section" warning is expected); `--stealth` adds a second hook, `--remove` deletes the hook.
 
 - **Shared server** `dolt.thelances.net:3307`, database `ds`, user `beads`, verified TLS. Claim atomically before you
   start (`bd ready --claim --json` or `bd update <id> --claim`); never work on an issue someone else claimed.
@@ -148,58 +151,3 @@ bd prime                # Refresh Beads context
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
 <!-- END BEADS CODEX SETUP -->
 
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
-
-## Agent Context Profiles
-
-The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
-
-- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
-- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
-- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
-
-## Session Completion
-
-This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
-
-1. **File issues for remaining work** - Create beads for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **Handle git/sync by active profile**:
-   ```bash
-   # Conservative/minimal/default: report status and proposed commands; wait for approval.
-   git status
-
-   # Team-maintainer opt-in only, unless current instructions forbid it:
-   git pull --rebase
-   git push
-   git status
-   ```
-5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
-
-**Critical rules:**
-- Explicit user or orchestrator instructions override this Beads block.
-- Do not commit or push without clear authority from the active profile or the current user request.
-- If a required sync or push is blocked, stop and report the exact command and error.
-<!-- END BEADS INTEGRATION -->
