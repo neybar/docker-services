@@ -275,8 +275,11 @@ with `--include` for the Plex `Databases` dir, `nzbhydra2/database`,
 `/mnt/docker/dolt/backups`, `/etc/restic`, the jalance crontab and
 `/var/lib/tailscale`, into a scratch dir on `/`). 3.4 GiB in about 70s; all
 paths present, the Dolt `native/ds` generation non-empty, `restic check` clean.
-Stock `sqlite3` cannot run `PRAGMA integrity_check` on the Plex DBs (custom
-tokenizer and collations), so use Plex's own SQLite for that.
+`PRAGMA integrity_check` returned `ok` for the newest dated `library.db` and
+`library.blobs.db` pair. Stock `sqlite3` cannot open these (custom tokenizer and
+collations); use Plex's own SQLite from a throwaway container with only the
+scratch dir mounted (never the live config):
+`docker run --rm --network none --entrypoint '/usr/lib/plexmediaserver/Plex SQLite' -v <scratch-db-dir>:/check lscr.io/linuxserver/plex:latest /check/<db-file> 'PRAGMA integrity_check;'`
 
 #### What is excluded (`/etc/restic/excludes`)
 
