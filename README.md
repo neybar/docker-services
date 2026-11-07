@@ -1,10 +1,11 @@
 # Home Server Docker Stack
 
 This repo is the live configuration of a single-host homelab: 22 Docker Compose services on one Ubuntu 24.04 server,
-with a Synology NAS for configs, media and backups. Every web service sits behind Traefik, a CrowdSec WAF and Authelia
-SSO/2FA. A merge to `master` is a deploy: GitHub-hosted CI checks each PR, and a self-hosted runner on the server
-applies the merged commit ([docs/DEPLOY.md](docs/DEPLOY.md)). The work is done by the maintainer and by AI coding
-agents (Claude Code, Codex, Cursor, Gemini) that share one rule file, [AGENTS.md](AGENTS.md), and coordinate through
+with a Synology NAS for configs, media and backups. Every compose-defined web service is routed through Traefik, a
+CrowdSec WAF and Authelia SSO/2FA. A merge to `master` is a deploy: GitHub-hosted CI checks each PR, and a
+self-hosted runner on the server applies the merged commit ([docs/DEPLOY.md](docs/DEPLOY.md)). The work is done by
+the maintainer and by AI coding agents (Claude Code, Codex, Cursor, Gemini) that share one rule file,
+[AGENTS.md](AGENTS.md), and coordinate through
 [Beads](https://github.com/gastownhall/beads) issues on a Dolt server that runs in this stack. The goal is that a total
 loss can be rebuilt from this repo, the backups and written docs alone; [REBUILD.md](REBUILD.md) is that runbook, and
 its §8 lists the gaps still open.
@@ -22,7 +23,7 @@ flowchart LR
 
     subgraph host["Docker host"]
         traefik["Traefik v3<br/>:80 redirects to HTTPS<br/>:443 TLS, HTTP/3"]
-        subgraph chain["chain-authelia@file: every HTTP router today"]
+        subgraph chain["chain-authelia@file (every router except the exceptions below)"]
             cs["crowdsec@file<br/>bouncer + AppSec WAF<br/>(fails open)"]
             rl["rate limit"]
             sh["secure headers"]
@@ -108,16 +109,16 @@ flowchart LR
     beads["Beads issues<br/>on the Dolt server"]
     pr["Feature branch + PR"]
     lint["lint.yml, GitHub-hosted<br/>shellcheck, compose config,<br/>CI script tests"]
-    integ["integration.yml, trusted PRs only<br/>live-stack checks, read-only"]
+    integ["integration.yml, self-hosted<br/>live-stack checks, read-only"]
     master["Merge to protected master"]
     deploy["deploy.yml, self-hosted runner<br/>scripts/deploy.sh"]
 
     who -- "claim, update, close" --> beads
     who --> pr
     pr --> lint
-    pr --> integ
+    pr -. "trusted PRs, when stack files change" .-> integ
     lint --> master
-    integ --> master
+    integ -.-> master
     master --> deploy
 ```
 
@@ -131,7 +132,7 @@ and restarts Traefik when its file rules changed ([docs/DEPLOY.md](docs/DEPLOY.m
   port-forwarded, such as Dolt
 - **Edge:** Traefik 3.6 (Docker and file providers), Let's Encrypt wildcard certificate via Cloudflare DNS-01
 - **Security:** CrowdSec 1.8 with the vendored Traefik bouncer plugin and AppSec, Authelia SSO/2FA, a Docker socket
-  proxy (no container gets the Docker socket directly)
+  proxy (no container other than the socket proxy gets the Docker socket directly)
 - **Storage:** Synology NAS over NFSv4.1 (containers) and CIFS (host), local NVMe for embedded databases, restic
 - **Apps:** Plex, Sonarr, Radarr, Bazarr, SABnzbd, NZBHydra2, Kometa, Calibre-Web, LazyLibrarian, Home Assistant and
   more (table below)
@@ -255,8 +256,8 @@ only as a failed renewal in `docker compose logs traefik`.
 
 Both are external, so create them before the first run:
 - `t2_proxy` (192.168.90.0/24): Traefik and every web-accessible service
-- `socket_proxy` (192.168.91.0/24): isolated, Docker Socket Proxy only. Nothing gets the Docker socket directly, and
-  CrowdSec has no Docker API access at all
+- `socket_proxy` (192.168.91.0/24): isolated, Docker Socket Proxy only. No container other than the socket
+  proxy gets the Docker socket directly, and CrowdSec has no Docker API access at all
 
 ```bash
 docker network create --gateway 192.168.90.1 --subnet 192.168.90.0/24 t2_proxy
