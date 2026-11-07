@@ -2,7 +2,7 @@
 
 Shared Dolt sql-server for `bd` (Beads) on several machines: `dolthub/dolt-sql-server:2.6.1`, MySQL protocol, TLS
 required, no Traefik/Authelia. Restore: [RESTORE.md](RESTORE.md). Bring-up on a fresh host: `REBUILD.md` §7. Rules for
-agents (claiming, credentials, schema migrations): `AGENTS.md`, "Beads in this repo".
+agents (claiming, credentials): `AGENTS.md`, "Beads in this repo", and `dolt/AGENTS.md`.
 
 ## Network
 
@@ -77,7 +77,14 @@ Upstream is `gastownhall/beads` (`steveyegge/beads` redirects there). Every clie
 - `BEADS_DOLT_CREDENTIAL_COMMAND` is **not** a password command: in 1.3.2 its output is sent as the MySQL *username*,
   which would put the password in the server's `Access denied` errors.
 - bd sends usage metrics by default; run `bd metrics off` per user.
-- Schema migrations after a bd upgrade: see "Beads in this repo" in `AGENTS.md`.
+
+### Schema migrations
+
+`bd init` and other commands refuse to migrate a server database that already has a schema (after a bd upgrade, or a
+half-finished init), because that promotes the schema for every client at once. After every client is upgraded, run
+`bd migrate schema` once from a set-up workspace; for a half-finished init with no other clients,
+`BD_ALLOW_REMOTE_MIGRATE=1 bd init …` inline, for that one run. Never persist `BD_ALLOW_REMOTE_MIGRATE` in a shell
+profile or the repo.
 
 ## Backup
 

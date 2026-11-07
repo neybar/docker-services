@@ -1,7 +1,7 @@
 # CrowdSec WAF and Traefik file rules
 
 How the CrowdSec WAF in front of every HTTP service works, why it is configured the way it is, and how to operate it.
-Bring-up and bouncer-key rotation: `REBUILD.md` §7. The short rules for agents are in `AGENTS.md`.
+Bring-up and bouncer-key rotation: `REBUILD.md` §7. The short rules for agents are in `AGENTS.md` and `traefik-rules/AGENTS.md`.
 
 ## Overview
 
