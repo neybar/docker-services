@@ -147,10 +147,9 @@ and restarts Traefik when its file rules changed ([docs/DEPLOY.md](docs/DEPLOY.m
 | [docs/DEPLOY.md](docs/DEPLOY.md) | How merge-to-deploy works, its security model, integration tests, rollback |
 | [docs/CROWDSEC.md](docs/CROWDSEC.md) | The WAF: how it is wired, why it fails open, how to operate it |
 | [docs/decisions/](docs/decisions/) | Architecture decision records |
+| [docs/incidents/](docs/incidents/) | Sanitized incident write-ups |
 | [dolt/README.md](dolt/README.md) | The Dolt server behind Beads |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding agents |
-
-Incident write-ups (`docs/incidents/`) are planned (ds-nhh.6.3).
 
 ## Roadmap
 
