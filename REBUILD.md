@@ -21,6 +21,7 @@ Start here, because these are the things a fresh host will not have and
 | Plex library database | `$NVME_DIR/plex/config` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
+| Docker waits for `/home` | `/etc/systemd/system/docker.service.d/wait-for-home.conf` | **not captured**: template in §5 (`/home disk`) |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
@@ -150,12 +151,38 @@ NZBHydra2's database path is not independently configurable (H2's URL is
 
 `/home` was on a Samsung 870 EVO that failed (957 reallocated sectors, 15k+
 uncorrectable errors, eventually refusing writes). On 2026-10-17 it was
-replaced by a 1TB TeamGroup T-Force Vulcan Z SATA SSD (ext4, label `home`,
-UUID `24be54cb-fcbc-4868-907d-c290dd2729a8`) and `/home` was copied over.
-`/` and `/var/lib/docker` are on the NVMe.
+replaced by a 1TB TeamGroup T-Force Vulcan Z SATA SSD and `/home` was copied
+over. On 2026-11-07 that filesystem failed to mount (ext4 group descriptors
+corrupted, cause unknown); it was recreated (`mkfs.ext4 -L home`) and restored
+from restic. `/` and `/var/lib/docker` are on the NVMe.
 
-`LOCALDOCKERDIR` resolves to `/home/jalance/Projects/docker-services`, on the
-new SSD.
+`LOCALDOCKERDIR` resolves to `/home/jalance/Projects/docker-services`, on this
+SSD, so the bind mounts in `docker-compose.yml` (`traefik-rules/`,
+`crowdsec-config/`, `acme/`, …) come from `/home`. The fstab line mounts by
+label, with `nofail` so a dead disk does not stop the boot:
+
+```
+LABEL=home /home ext4 defaults,nofail 0 2
+```
+
+`nofail` alone lets Docker start before `/home` mounts. Containers then bind the
+empty directory underneath it and keep it after `/home` appears: on 2026-11-07
+Traefik came up with an empty `/rules`, no `chain-*@file` middlewares existed,
+and every chained router returned 404 until Traefik and CrowdSec were
+recreated. Make Docker wait for `/home`:
+
+```
+sudo mkdir -p /etc/systemd/system/docker.service.d
+printf '[Unit]\nRequiresMountsFor=/home\n' |
+  sudo tee /etc/systemd/system/docker.service.d/wait-for-home.conf
+sudo systemctl daemon-reload
+systemctl show docker -p RequiresMountsFor   # RequiresMountsFor=/home
+```
+
+If `/home` fails to mount, Docker does not start at all (an obvious outage
+instead of services running on empty directories). If that happened before
+this drop-in existed, recreate the containers with `/home` bind mounts:
+`docker compose up -d --force-recreate traefik crowdsec`.
 
 ---
 
