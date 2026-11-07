@@ -3,10 +3,10 @@
 Home server Docker infrastructure: self-hosted services on Docker Compose behind Traefik, with a CrowdSec WAF and
 Authelia SSO/2FA in front of every web service and a Synology NAS (192.168.0.6) for storage.
 
-This file is the **single source of instructions for AI coding agents** (Claude Code, Codex, Cursor, Gemini).
-`CLAUDE.md` imports it, `GEMINI.md` is a symlink to it, Cursor reads it natively. Keep rules here short and link the
+This file is the **single source of agent instructions** (Claude Code, Codex, Cursor, Gemini).
+`CLAUDE.md` imports it, `GEMINI.md` is a symlink to it, Cursor reads it natively. Keep rules short and link the
 human docs: `README.md` (services, variables), `REBUILD.md` (fresh host), `docs/DEPLOY.md`, `docs/CROWDSEC.md`,
-`dolt/README.md`. `scripts/ci/test-agent-docs.sh` caps this file at 16 KiB and checks the paths it names.
+`dolt/README.md`. `scripts/ci/test-agent-docs.sh` caps this file at 16 KiB, checks named paths (repo-root-relative).
 
 ## Hard rules
 
@@ -66,7 +66,7 @@ human docs: `README.md` (services, variables), `REBUILD.md` (fresh host), `docs/
 | Dolt, `dolt/`, its NAS config or certs | `./scripts/validate-dolt.sh` |
 | NVMe mounts or `scripts/lib/nvme-paths.sh` | `./scripts/ci/test-nvme-paths.sh` |
 | `scripts/ci/integration-plan.sh` | `./scripts/ci/test-integration-plan.sh` |
-| `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | `./scripts/ci/test-agent-docs.sh` |
+| any `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | `./scripts/ci/test-agent-docs.sh` |
 | any shell script | `shellcheck` (CI runs it at severity `info`) |
 
 The `validate-*` scripts probe the **live** stack (deployed code, not your branch) and need orcrist and `.env`;
