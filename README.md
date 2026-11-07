@@ -53,7 +53,7 @@ Key variables:
 | `CLOUDFLARE_DNS_API_TOKEN` | DNS challenge token from the "Edit zone DNS" template, scoped to `DOMAINNAME`'s zone only (below). Reaches Traefik as the compose secret `cloudflare_dns_api_token` (`CF_DNS_API_TOKEN_FILE`). Never the Global API Key |
 | `CLOUDFLARE_ZONEID` | Zone ID (not referenced by compose) |
 | `DOCKERDIR` | NFS mount path (e.g. `/mnt/docker`) |
-| `LOCALDOCKERDIR` | The repo checkout (`/home/jalance/Projects/docker-services`, on the /home SATA SSD; `REBUILD.md` §5). Holds the gitignored local state: `acme/`, `crowdsec/`, `traefik-logs/` |
+| `LOCALDOCKERDIR` | The repo checkout (`/home/jalance/Projects/docker-services`, under `/home`, on the NVMe since 2026-11-07; `REBUILD.md` §5). Holds the gitignored local state: `acme/`, `crowdsec/`, `traefik-logs/` |
 | `NVME_DIR` | Optional. Parent of the local NVMe paths `$NVME_DIR/<service>/<role>` (default `/usr/local/docker`, on `/`; `REBUILD.md` §5). Not `LOCALDOCKERDIR` |
 | `SYNOLOGYDIR` | Synology NAS mount |
 | `CROWDSEC_BOUNCER_KEY` | Traefik↔CrowdSec bouncer key (`openssl rand -hex 32`). Passed to both as the compose secret `crowdsec_bouncer_key`; CrowdSec registers it as bouncer `traefik` ([docs/CROWDSEC.md](docs/CROWDSEC.md)) |

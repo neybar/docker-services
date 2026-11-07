@@ -5,7 +5,7 @@
 # scripts/ci/test-nvme-paths.sh, which fails if docker-compose.yml's NVMe mounts disagree with this table.
 #
 # Layout: $NVME_DIR/<service>/<role>. NVME_DIR defaults to /usr/local/docker (on /, the NVMe). It is NOT
-# LOCALDOCKERDIR, which is the repo checkout on the /home SATA SSD. A new service that needs the fast drive gets a
+# LOCALDOCKERDIR, which is the repo checkout under /home (restic-backed). A new service that needs the fast drive gets a
 # row here and a `${NVME_DIR:-/usr/local/docker}/<service>/<role>:<mount>` bind mount in compose.
 #
 # Columns (|-separated):
