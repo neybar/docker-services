@@ -27,6 +27,8 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 4. **Plain `docker compose`, no host addresses in compose**: run `docker compose <args>` from the checkout root, no
    wrapper. Never bind a port to a host IP (LAN or Tailscale) or require one as a variable: they change, and a stale
    one stops the service. Restrict access at the network (no port forward, tailnet ACL) and in the service (TLS, auth).
+   `NAS_IP` (the Synology's address, for NFS and the file-provider rules) is not this host's address and may be a
+   variable (ADR 0004).
 5. **Every HTTP router uses a `chain-*@file` middleware**: `chain-authelia` (default), `chain-no-auth` or
    `chain-basic-auth`. Each starts with `crowdsec@file`, so a router without one bypasses the WAF (and usually
    Authelia). Only intended exception: `http-catchall` (HTTPS redirect, no backend). Never remove `crowdsec@file`

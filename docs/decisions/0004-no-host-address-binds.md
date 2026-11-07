@@ -23,6 +23,11 @@ tailscaled was late." PR #38 itself had to add a fallback for a missing Tailscal
 3. Restrict access at the network (no port forward, the tailnet ACL) and in the service (TLS, per-user auth).
    Dolt publishes `:3307` on every host address on this basis.
 
+Scope: this is about addresses of **this host** (bind addresses). `NAS_IP`, the address of the Synology NAS that
+compose reaches over NFS and that `traefik-rules/` routes to, is a remote server's address, is not bound to, and is a
+variable so the repo carries no instance addresses (`ds-nhh.5.1`, ADR 0001). A stale value breaks the NFS mounts and
+two routers, the same as the literal it replaced; it adds no new failure. Keep that address reserved on the gateway.
+
 ## Alternatives considered
 
 - **Keep the derived-address wrapper** (PR #38). Replaced by this decision: it needed state outside the repo and

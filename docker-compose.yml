@@ -29,118 +29,118 @@ volumes:
   homeassistant_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/homeassistant
   hydra_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/hydra
   dolt_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/dolt
   authelia_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/authelia
   radarr_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/radarr
   bazarr_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/bazarr
   sonarr_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/sonarr
   sabnzb_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/sabnzb
   traefik_acme_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,ro,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},ro,nfsvers=4.1,async
       device: :/volume1/docker/traefik3/acme
   portainer_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/portainer/data
   organizr_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/organizr
   calibre-web_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/calibre-web
   lazylibrarian_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/lazylibrarian
   isponsorblocktv_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/isponsorblocktv
   smokeping_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/smokeping
   librespeed_config:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/librespeed
   video:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/video
   audiobooks:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/audiobooks
   music:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/music
   photo:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/photo
   ebooks:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/ebooks
   downloads:
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/downloads
   kometa_config:
     driver: local
     driver_opts:
       type: nfs
-      o: addr=192.168.0.6,rw,nfsvers=4.1,async
+      o: addr=${NAS_IP:?set NAS_IP in .env},rw,nfsvers=4.1,async
       device: :/volume1/docker/kometa
 
 ######### SECRETS
@@ -254,6 +254,7 @@ services:
       # Scoped "Edit zone DNS" token for the ACME DNS challenge (not the account-wide Global API Key); lego reads *_FILE
       - CF_DNS_API_TOKEN_FILE=/run/secrets/cloudflare_dns_api_token
       - DOMAINNAME=$DOMAINNAME # used by {{ env "DOMAINNAME" }} templates in ./traefik-rules
+      - NAS_IP=$NAS_IP # used by {{ env "NAS_IP" }} templates in ./traefik-rules
     # Secrets as files, not labels/env: those are visible in `docker inspect` and the dashboard
     secrets:
       - crowdsec_bouncer_key

@@ -11,7 +11,7 @@ http:
     grond-photo-svc:
       loadBalancer:
         servers:
-          - url: "http://192.168.0.6:80/"
+          - url: 'http://{{ env "NAS_IP" }}:80/'
 
 tcp:
   routers:
@@ -35,9 +35,9 @@ tcp:
     grond-https-svc:
       loadBalancer:
         servers:
-          - address: "192.168.0.6:443"
+          - address: '{{ env "NAS_IP" }}:443'
 
     grond-admin-svc:
       loadBalancer:
         servers:
-          - address: "192.168.0.6:5001"
+          - address: '{{ env "NAS_IP" }}:5001'

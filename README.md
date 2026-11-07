@@ -221,6 +221,7 @@ Key variables:
 | `LOCALDOCKERDIR` | The repo checkout (`/home/jalance/Projects/docker-services`, under `/home`, on the NVMe since 2026-11-07; `REBUILD.md` §5). Holds the gitignored local state: `acme/`, `crowdsec/`, `traefik-logs/` |
 | `NVME_DIR` | Optional. Parent of the local NVMe paths `$NVME_DIR/<service>/<role>` (default `/usr/local/docker`, on `/`; `REBUILD.md` §5). Not `LOCALDOCKERDIR` |
 | `SYNOLOGYDIR` | Synology NAS mount |
+| `NAS_IP` | Synology address: the NFS volumes' `addr=` in compose and the Synology/Homebridge routers in `traefik-rules/` (passed to Traefik as an env var). Required; keep it reserved on the gateway |
 | `CROWDSEC_BOUNCER_KEY` | Traefik↔CrowdSec bouncer key (`openssl rand -hex 32`). Passed to both as the compose secret `crowdsec_bouncer_key`; CrowdSec registers it as bouncer `traefik` ([docs/CROWDSEC.md](docs/CROWDSEC.md)) |
 | `DOLT_BEADS_PASSWORD` | Password for the Dolt user `beads` (`openssl rand -hex 32`, hex only). Compose secret `dolt_beads_password`, not a container env var |
 | `PLEX_TOKEN` | Plex auth token (used by Kometa; from Plex account settings) |
