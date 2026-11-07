@@ -64,7 +64,7 @@ password=<password>
 Then one `/etc/fstab` line per share, all using the same options:
 
 ```
-//192.168.0.6/<share> /mnt/<share> cifs user,vers=3.0,uid=jalance,gid=users,rw,suid,nobrl,file_mode=0600,dir_mode=0700,credentials=/etc/cifspwd 0 0
+//192.168.0.6/<share> /mnt/<share> cifs _netdev,x-systemd.automount,user,vers=3.0,uid=jalance,gid=users,rw,suid,nobrl,file_mode=0600,dir_mode=0700,credentials=/etc/cifspwd 0 0
 ```
 
 Shares: `audiobooks` `backups` `docker` `downloads` `ebooks` `music` `photo`
@@ -72,6 +72,36 @@ Shares: `audiobooks` `backups` `docker` `downloads` `ebooks` `music` `photo`
 
 `nobrl` matters — it disables byte-range locking, which is what lets SQLite
 work at all over CIFS. Do not drop it.
+
+`_netdev,x-systemd.automount` matter too: a mount that fails at boot is not
+retried, and automount mounts the share on first access instead.
+
+### Boot order: wait for IPv4, then the NAS
+
+On 2026-11-07 all ten mounts failed at boot with `mount error(101): Network is
+unreachable`. `network-online.target` was reached on enp2s0f0's IPv6 address,
+0.24s before DHCPv4 gave it `192.168.0.3`, and the NAS is reached over IPv4.
+It is a race, so some boots mount fine. Two drop-ins fix it; netplan's own
+drop-in is `/run/.../10-netplan.conf`, so the wait-online one must sort after it:
+
+```
+sudo mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
+printf '[Service]\nExecStart=\nExecStart=/lib/systemd/systemd-networkd-wait-online -i enp2s0f0 -o routable -4\n' |
+  sudo tee /etc/systemd/system/systemd-networkd-wait-online.service.d/20-require-ipv4.conf
+sudo mkdir -p /etc/systemd/system/docker.service.d
+printf '[Unit]\nRequiresMountsFor=/mnt/docker\n' |
+  sudo tee /etc/systemd/system/docker.service.d/wait-for-nas.conf
+sudo systemctl daemon-reload
+systemctl show docker -p RequiresMountsFor   # includes /mnt/docker
+```
+
+Replace `enp2s0f0` with the new host's LAN interface. Without the Docker
+drop-in, containers start on the directory underneath an unmounted
+`/mnt/docker`, which on this host is not empty: authelia came up on that old
+copy, and the deploy's Dolt drift check compared against it and refused to
+deploy. With it, a `/mnt/docker` that fails to mount stops Docker from
+starting. After a boot, `journalctl -b | grep -E 'DHCPv4|network-online'`
+should show the DHCPv4 line first.
 
 Note the containers reach the same Synology paths over **NFS** via Docker
 volume `driver_opts`, independently of these host CIFS mounts. Both protocols
@@ -183,7 +213,7 @@ Traefik came up with an empty `/rules`, no `chain-*@file` middlewares existed,
 and every chained router returned 404. The runner and the Minecraft manager
 (their `WorkingDirectory` is under `/home`) failed with "Dependency failed", so
 deploys sat queued. This drop-in, installed on orcrist, makes Docker wait (with
-`/home` on `/` it is a no-op):
+`/home` on `/` it is a no-op; the `/mnt/docker` one is in §3):
 
 ```
 sudo mkdir -p /etc/systemd/system/docker.service.d
