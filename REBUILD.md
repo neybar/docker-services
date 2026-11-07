@@ -22,7 +22,7 @@ Start here, because these are the things a fresh host will not have and
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Docker waits for `/home` | `/etc/systemd/system/docker.service.d/wait-for-home.conf` | **not captured**: template in §5 (`/home disk`) |
-| Host backup (restic) | `/etc/restic/`, `/usr/local/sbin/restic-backup`, `restic-{backup,check}.{service,timer}`, `restic-notify@.service` in `/etc/systemd/system/` | **not captured**: what it covers and how to restore are in §6. The repo password file is on the NAS next to the repository, never in this repo |
+| Host backup (restic) | `/etc/restic/`, `/usr/local/sbin/restic-backup`, `restic-{backup,check}.{service,timer}`, `restic-notify@.service` in `/etc/systemd/system/` | **not captured**: what it covers and how to restore are in §6. The repo password file is on the NAS next to the repository, never in this repo. Because restic backs up all of `/`, the uncaptured host files in this table (crontab, drop-ins, `/etc/restic/` itself) are in every snapshot |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
@@ -239,11 +239,12 @@ directory a mount is hiding: `sudo mount --bind / /mnt/rootfs`, then
 | Service configs | `/mnt/docker/<service>/` (NAS) | yes, Synology handles it |
 | Media libraries | NAS shares | yes |
 | This repo | GitHub | yes |
-| Host: `/home`, `/etc`, `/root`, `/usr/local/{bin,sbin,libexec}` | restic repo `/mnt/backups/restic-orcrist` (NAS, CIFS) | yes, daily 03:30 America/Denver; keeps 14 daily, 8 weekly, 12 monthly; `restic check` Sundays 05:00. Excludes `~/.cache` and `dolt/data`. Includes the repo checkout's gitignored state (`.env`, `acme/`, `crowdsec/`) |
+| Host: all of `/` (one filesystem) plus `/boot/efi`, minus what a fresh install or `docker pull` gives back (below) | restic repo `/mnt/backups/restic-orcrist` (NAS, CIFS) | yes, daily 03:30 America/Denver; keeps 14 daily, 8 weekly, 12 monthly (`--group-by host,tags`); `restic check` Sundays 05:00. Covers `/home` (with the repo checkout's gitignored `.env`, `acme/`, `crowdsec/`), `/etc`, `/root`, `/usr/local` (all of `$NVME_DIR`), `/var/spool/cron`, `/var/lib/tailscale` |
+| Package manifest | `/var/lib/restic-backup/manifest/` | yes, in restic: `restic-backup` writes `dpkg-selections.txt`, `apt-manual.txt`, `snap-list.txt` and `docker-images.txt` before each run |
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
-| **Plex library DB** | `$NVME_DIR/plex/config` | **NO — see below** |
-| NZBHydra2 H2 DB | `$NVME_DIR/nzbhydra2/database` | no, and acceptable (history only) |
-| Dolt (Beads) data | `$NVME_DIR/dolt/data` (local NVMe) | latest snapshot only, in `/mnt/docker/dolt/backups` (NAS), from jalance's 03:00 crontab (§1). No dated generations |
+| Plex library DB | `$NVME_DIR/plex/config` | yes, in restic (see below) |
+| NZBHydra2 H2 DB | `$NVME_DIR/nzbhydra2/database` | yes, in restic, read live (may not be consistent; history only) |
+| Dolt (Beads) data | `$NVME_DIR/dolt/data` (local NVMe) | the live directory is excluded (not crash-consistent). jalance's 03:00 crontab (§1) writes a snapshot to `/mnt/docker/dolt/backups` (NAS), and restic, at 03:30, keeps dated generations of that directory |
 | Dolt config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | yes, Synology; templates in `dolt/` |
 
 ### Restoring from restic
@@ -262,24 +263,33 @@ Used for real on 2026-11-07 (restic 0.16.4):
   repo deleted from `/home` quietly drops out of later snapshots
   (`Projects/dotfiles` was missing from every snapshot after 2026-11-04, cause
   unknown).
-- `/usr/local/plex` in the include list is a symlink to `$NVME_DIR/plex/config`,
-  and restic stores the link, not its target (`restic ls latest /usr/local/plex`
-  lists only the link). The Plex DB is therefore **not** in restic, as the table
-  above says.
+- restic stores a symlink, not its target. Until 2026-11-07 the include list
+  named `/usr/local/plex` (a link to `$NVME_DIR/plex/config`), so no snapshot
+  before `129d6c33` has the Plex DB. Backing up `/` avoids this: every real
+  path is under it.
+- `--one-file-system` keeps the NAS mounts out of `/`. A NAS path is backed up
+  only when listed by itself (`/mnt/docker/dolt/backups`).
 
-### Plex database backup (required, not yet implemented)
+#### What is excluded (`/etc/restic/excludes`)
 
-`$NVME_DIR/plex/config` is 13GB but only the `Databases/` directory is
-irreplaceable — the rest is cache and transcodes that regenerate. A periodic
-tar of just that directory to `/mnt/backups` covers the real risk:
+Regenerable: `/var/lib/docker`, `/var/lib/containerd`, `/opt/containerd`,
+`/var/lib/snapd`, `/snap`, `/var/cache`, `/var/tmp`, `/tmp`, `/var/crash`,
+`/var/log/journal`, `/swap.img`, `~/.cache`, and Plex's `Cache`, `Codecs`,
+`Crash Reports`, `Diagnostics`, `Drivers`, `Logs` and `Updates`. Also the
+live Dolt data (above). Plex `Metadata` and `Media` (about 9GB) stay in:
+Plex can refetch them, slowly, but custom artwork would be lost.
 
-```
-$NVME_DIR/plex/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/
-```
+#### Plex database
 
-Plex should be stopped, or its scheduled-task backup used, so the SQLite files
-are captured consistently. The `task-scheduler` service already runs cron jobs
-for this stack and is the natural home for it.
+`Plug-in Support/Databases/` under
+`$NVME_DIR/plex/config/Library/Application Support/Plex Media Server/` holds
+the live SQLite files and the dated copies that Plex's own scheduled task
+writes every 3 days (`com.plexapp.plugins.library.db-YYYY-MM-DD`, same for
+`library.blobs.db`). restic reads the live files while Plex runs, so they may
+not be consistent; the dated copies are. To restore, stop Plex and copy the
+newest dated pair over `com.plexapp.plugins.library.db` and
+`com.plexapp.plugins.library.blobs.db`, after deleting their `-wal` and `-shm`
+files.
 
 ---
 
@@ -288,7 +298,7 @@ for this stack and is the natural home for it.
 ```bash
 git clone <repo> && cd docker-services
 cp env.example .env     # fill in all variables (incl. CROWDSEC_BOUNCER_KEY and DOLT_BEADS_PASSWORD, see below)
-# restore $NVME_DIR/plex/config (default /usr/local/docker/plex/config) from backup FIRST (see §5)
+# restore $NVME_DIR (default /usr/local/docker) from restic FIRST (see §5, §6)
 touch acme/acme.json && chmod 600 acme/acme.json
 docker compose up -d
 ./scripts/validate-traefik.sh
@@ -385,7 +395,6 @@ Known gaps are tracked as Beads issues (database `ds`, `bd show <id>`), not here
 |---|---|
 | `ds-n71` | fstab and `resolved.conf` as checked-in templates or generated by a bootstrap script |
 | `ds-69h` | `scripts/bootstrap-host.sh`: packages → networks → mounts → checks |
-| `ds-6d1` | Plex database backup job (§6) in `task-scheduler` |
 | `ds-oko` | Secret handling for `.env` and `/etc/cifspwd`, end to end |
 | `ds-hzh` | Synology-side configuration (shares, NFS exports, permissions) |
 | `ds-1uw` | Remaining SQLite configs (Sonarr, Radarr, …) off NFS onto `$NVME_DIR` (§5), not `LOCALDOCKERDIR`; hydra is the reference |
