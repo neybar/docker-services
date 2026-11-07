@@ -112,7 +112,7 @@ elsewhere skip them and say so in the PR. `integration.yml` runs them for truste
 
 **Storage** ([REBUILD.md](REBUILD.md) §5-6)
 - NFS (Synology) for service configs and media. Local NVMe at `$NVME_DIR/<service>/<role>` (default
-  `/usr/local/docker`, on `/`). `$NVME_DIR` is **not** `LOCALDOCKERDIR`, which is the repo checkout on the SATA SSD.
+  `/usr/local/docker`, on `/`). `$NVME_DIR` is **not** `LOCALDOCKERDIR`, which is the repo checkout under `/home`.
 - The Plex library DB (`$NVME_DIR/plex/config`) is in **no backup**: an empty path starts a healthy-looking, empty Plex.
 - NZBHydra2: NFSv4 lock loss (EIO, ~every 9 days) wedges H2. Keep its nested NVMe mount and `stop_grace_period: 120s`.
 - Logging: every container uses `*default-logging`; do not add an external logrotate.

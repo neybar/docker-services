@@ -22,6 +22,7 @@ Start here, because these are the things a fresh host will not have and
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Docker waits for `/home` | `/etc/systemd/system/docker.service.d/wait-for-home.conf` | **not captured**: template in §5 (`/home disk`) |
+| Host backup (restic) | `/etc/restic/`, `/usr/local/sbin/restic-backup`, `restic-{backup,check}.{service,timer}`, `restic-notify@.service` in `/etc/systemd/system/` | **not captured**: what it covers and how to restore are in §6. The repo password file is on the NAS next to the repository, never in this repo |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
@@ -100,7 +101,7 @@ looks healthy while doing it.
 
 Every service that needs the NVMe lives under one parent, `$NVME_DIR/<service>/<role>`. `NVME_DIR` is optional in
 `.env`; compose defaults it to `/usr/local/docker`, which is on `/` (the NVMe). It is **not** `LOCALDOCKERDIR`, the
-repo checkout on the /home SATA SSD (below). The list is `NVME_PATHS` in `scripts/lib/nvme-paths.sh`;
+repo checkout under `/home` (below). The list is `NVME_PATHS` in `scripts/lib/nvme-paths.sh`;
 `scripts/ci/test-nvme-paths.sh` fails if compose's mounts disagree with it.
 
 | Path | Holds | If empty on rebuild |
@@ -149,27 +150,40 @@ NZBHydra2's database path is not independently configurable (H2's URL is
 
 ### /home disk
 
-`/home` was on a Samsung 870 EVO that failed (957 reallocated sectors, 15k+
-uncorrectable errors, eventually refusing writes). On 2026-10-17 it was
-replaced by a 1TB TeamGroup T-Force Vulcan Z SATA SSD and `/home` was copied
-over. On 2026-11-07 that filesystem failed to mount (ext4 group descriptors
-corrupted, cause unknown); it was recreated (`mkfs.ext4 -L home`) and restored
-from restic. `/` and `/var/lib/docker` are on the NVMe.
+`/home` is a plain directory on the NVMe root filesystem, not a separate mount.
+The 2.5" SATA bay is retired:
 
-`LOCALDOCKERDIR` resolves to `/home/jalance/Projects/docker-services`, on this
-SSD, so the bind mounts in `docker-compose.yml` (`traefik-rules/`,
-`crowdsec-config/`, `acme/`, …) come from `/home`. The fstab line mounts by
-label, with `nofail` so a dead disk does not stop the boot:
+- 2026-10-17: the Samsung 870 EVO in the bay failed (957 reallocated sectors,
+  15k+ uncorrectable errors, eventually refusing writes). Replaced by a 1TB
+  TeamGroup T-Force Vulcan Z.
+- 2026-10-31 to 2026-11-06: the T-Force logged read errors and ext4 checksum
+  errors, while its own SMART stayed clean.
+- 2026-11-07: its filesystem failed to mount (ext4 group descriptors
+  corrupted). It was recreated, restored from restic (§6), then copied to the
+  NVMe with `rsync -aHAX --delete` and the `/home` line in `/etc/fstab` was
+  commented out (with a note saying why).
 
-```
-LABEL=home /home ext4 defaults,nofail 0 2
-```
+Two drives failing in the same bay within three weeks points at the bay's path
+(the ASRock 4X4 BOX-4000 uses a proprietary flat SATA data+power cable, and
+there is no second port) or at RAM; neither is proven. Do not put `/home` back
+on that bay until the cable is replaced and a memtest completes. The T-Force
+(label `home`) is still installed and unmounted.
 
-`nofail` alone lets Docker start before `/home` mounts. Containers then bind the
-empty directory underneath it and keep it after `/home` appears: on 2026-11-07
+`LOCALDOCKERDIR` resolves to `/home/jalance/Projects/docker-services`, so the
+bind mounts in `docker-compose.yml` (`traefik-rules/`, `crowdsec-config/`,
+`acme/`, `crowdsec/`, …) come from `/home`. Also under `/home`: the GitHub
+Actions runner (`actions-runner/`, which runs every deploy) and the Minecraft
+manager (`~/games`).
+
+#### If `/home` is ever a separate mount again
+
+With `nofail` in fstab, Docker can start before `/home` mounts. Containers bind
+the empty directory underneath and keep it after `/home` appears: on 2026-11-07
 Traefik came up with an empty `/rules`, no `chain-*@file` middlewares existed,
-and every chained router returned 404 until Traefik and CrowdSec were
-recreated. Make Docker wait for `/home`:
+and every chained router returned 404. The runner and the Minecraft manager
+(their `WorkingDirectory` is under `/home`) failed with "Dependency failed", so
+deploys sat queued. This drop-in, installed on orcrist, makes Docker wait (with
+`/home` on `/` it is a no-op):
 
 ```
 sudo mkdir -p /etc/systemd/system/docker.service.d
@@ -179,10 +193,12 @@ sudo systemctl daemon-reload
 systemctl show docker -p RequiresMountsFor   # RequiresMountsFor=/home
 ```
 
-If `/home` fails to mount, Docker does not start at all (an obvious outage
-instead of services running on empty directories). If that happened before
-this drop-in existed, recreate the containers with `/home` bind mounts:
-`docker compose up -d --force-recreate traefik crowdsec`.
+With it, a `/home` that fails to mount stops Docker from starting (an obvious
+outage instead of services on empty directories). If containers did start
+without `/home`, recreate the ones with `/home` bind mounts once it is mounted:
+`docker compose up -d --force-recreate traefik crowdsec`. To look at the
+directory a mount is hiding: `sudo mount --bind / /mnt/rootfs`, then
+`/mnt/rootfs/home`.
 
 ---
 
@@ -193,11 +209,33 @@ this drop-in existed, recreate the containers with `/home` bind mounts:
 | Service configs | `/mnt/docker/<service>/` (NAS) | yes, Synology handles it |
 | Media libraries | NAS shares | yes |
 | This repo | GitHub | yes |
+| Host: `/home`, `/etc`, `/root`, `/usr/local/{bin,sbin,libexec}` | restic repo `/mnt/backups/restic-orcrist` (NAS, CIFS) | yes, daily 03:30 America/Denver; keeps 14 daily, 8 weekly, 12 monthly; `restic check` Sundays 05:00. Excludes `~/.cache` and `dolt/data`. Includes the repo checkout's gitignored state (`.env`, `acme/`, `crowdsec/`) |
 | Minecraft worlds | `/mnt/backups/minecraft-rescue-*` | manual snapshot, 2026-10-03 |
 | **Plex library DB** | `$NVME_DIR/plex/config` | **NO — see below** |
 | NZBHydra2 H2 DB | `$NVME_DIR/nzbhydra2/database` | no, and acceptable (history only) |
 | Dolt (Beads) data | `$NVME_DIR/dolt/data` (local NVMe) | latest snapshot only, in `/mnt/docker/dolt/backups` (NAS), from jalance's 03:00 crontab (§1). No dated generations |
 | Dolt config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | yes, Synology; templates in `dolt/` |
+
+### Restoring from restic
+
+Used for real on 2026-11-07 (restic 0.16.4):
+
+- `/mnt/backups` must be mounted first; the backup service refuses to run
+  without it. Load the environment: `sudo bash -c 'set -a; . /etc/restic/orcrist.env; restic snapshots'`.
+- Restore **as root**. A restore run as your user writes every file as your
+  user, which flattens ownership (container state such as `crowdsec/` and
+  `acme/` is not owned by jalance). The fix was re-running it with sudo:
+  `restic restore <snap>:/home --target /home --verify`.
+- 0.16.4 has no `--overwrite` (0.17+).
+- Check that the directory you need is in the snapshot before trusting it:
+  `restic diff <older> <newer>` shows what disappeared between snapshots. A
+  repo deleted from `/home` quietly drops out of later snapshots
+  (`Projects/dotfiles` was missing from every snapshot after 2026-11-04, cause
+  unknown).
+- `/usr/local/plex` in the include list is a symlink to `$NVME_DIR/plex/config`,
+  and restic stores the link, not its target (`restic ls latest /usr/local/plex`
+  lists only the link). The Plex DB is therefore **not** in restic, as the table
+  above says.
 
 ### Plex database backup (required, not yet implemented)
 
