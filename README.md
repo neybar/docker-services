@@ -154,6 +154,28 @@ Task Scheduler handles routine maintenance automatically:
 Shared Dolt sql-server for `bd` on several machines. Not behind Traefik. Its config lives on the NAS; `dolt/` holds
 templates. Details: [dolt/README.md](dolt/README.md), restore: [dolt/RESTORE.md](dolt/RESTORE.md).
 
+## Adding a service
+
+1. Copy an existing service in `docker-compose.yml` (e.g. `smokeping` or `radarr`), keeping `logging: *default-logging`
+   and `security_opt: no-new-privileges:true`. Join the `t2_proxy` network.
+2. Labels:
+   ```yaml
+   - "traefik.enable=true"
+   - "traefik.http.routers.<name>-rtr.entrypoints=https"
+   - "traefik.http.routers.<name>-rtr.rule=Host(`<name>.$DOMAINNAME`)"
+   - "traefik.http.routers.<name>-rtr.tls=true"
+   - "traefik.http.routers.<name>-rtr.middlewares=chain-authelia@file"
+   - "traefik.http.routers.<name>-rtr.service=<name>-svc"
+   - "traefik.http.services.<name>-svc.loadbalancer.server.port=<port>"
+   ```
+3. Config persistence: an NFS volume (follow the existing pattern). If it needs the local NVMe instead (an embedded
+   database, or speed), mount `${NVME_DIR:-/usr/local/docker}/<service>/<role>` and add a row to `NVME_PATHS` in
+   `scripts/lib/nvme-paths.sh` (`./scripts/ci/test-nvme-paths.sh` fails until both agree).
+4. New required variables: `AGENTS.md` hard rule 7 (a dummy value in `.github/workflows/lint.yml` and a line in
+   `env.example`).
+5. Add the subdomain to `SERVICES` in `scripts/validate-traefik.sh` and a row to the Services table above.
+6. After the deploy, run `./scripts/validate-traefik.sh`.
+
 ## Development
 
 Changes go through a feature branch and a PR; a merge to `master` deploys ([docs/DEPLOY.md](docs/DEPLOY.md)).
