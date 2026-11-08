@@ -10,7 +10,7 @@ Request path: Traefik → `crowdsec@file` (bans + AppSec WAF) → Authelia (`cha
 - The Traefik plugin `crowdsec@file` (defined in `traefik-rules/crowdsec.yml`) does stream-mode bans (LAPI
   `crowdsec:8080`, refresh 60s) and AppSec (`crowdsec:7422`) on each request.
 - It is the **first entry of every middleware chain** (`traefik-rules/middleware-chains.yml`: `chain-authelia`,
-  `chain-no-auth`, `chain-basic-auth`), so banned IPs and attack payloads are stopped before Authelia.
+  `chain-no-auth`), so banned IPs and attack payloads are stopped before Authelia.
 - AppSec runs 4 runners (`routines: 4` in `crowdsec-config/acquis.d/appsec.yaml`; the default is 1, which serialises
   every request).
 - Config + SQLite DB are on local disk at `$LOCALDOCKERDIR/crowdsec/{config,data}` (gitignored, regenerable: losing it

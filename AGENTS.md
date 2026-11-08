@@ -29,10 +29,9 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
    one stops the service. Restrict access at the network (no port forward, tailnet ACL) and in the service (TLS, auth).
    `NAS_IP` (the Synology's address, for NFS and the file-provider rules) is not this host's address and may be a
    variable (ADR 0004).
-5. **Every HTTP router uses a `chain-*@file` middleware**: `chain-authelia` (default), `chain-no-auth` or
-   `chain-basic-auth`. Each starts with `crowdsec@file`, so a router without one bypasses the WAF (and usually
-   Authelia). Only intended exception: `http-catchall` (HTTPS redirect, no backend). Never remove `crowdsec@file`
-   from a chain.
+5. **Every HTTP router uses a `chain-*@file` middleware**: `chain-authelia` (default) or `chain-no-auth`. Each
+   starts with `crowdsec@file`, so a router without one bypasses the WAF (and usually Authelia). Only intended
+   exception: `http-catchall` (HTTPS redirect, no backend). Never remove `crowdsec@file` from a chain.
 6. **No secrets in the repo, which is public**: no tokens, passwords, keys or identifying live config in files, commit
    messages or PR text (`.env`, `acme/` and local service state are gitignored). Never print secrets.
 7. **CI has no `.env`**: a new required `${VAR:?}` in compose needs a dummy value in the "Validate docker-compose.yml"

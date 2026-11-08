@@ -49,8 +49,7 @@ flowchart LR
 
 - **Chains.** Every chain starts with `crowdsec@file`, then rate limiting and secure headers
   ([traefik-rules/middleware-chains.yml](traefik-rules/middleware-chains.yml)). `chain-authelia` adds Authelia;
-  `chain-no-auth` and `chain-basic-auth` are defined as variants, but no router uses them today (Beads ds-2xi tracks
-  the unused basic-auth one).
+  `chain-no-auth` is the variant without authentication.
 - **Fail open, on purpose.** If CrowdSec's LAPI or AppSec is down, traffic passes and Authelia is still the auth
   layer; a wrong bouncer key blocks instead ([docs/CROWDSEC.md](docs/CROWDSEC.md)).
 - **Known exceptions.** The `:80` catch-all router only redirects to HTTPS (no backend). The NAS admin UI is behind TCP

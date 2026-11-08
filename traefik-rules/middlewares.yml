@@ -7,12 +7,6 @@ http:
         average: 100
         burst: 50
 
-    # Not used by any router (chain-basic-auth is unused) and /shared is not mounted, so the file does not exist.
-    middlewares-basic-auth:
-      basicAuth:
-        realm: "Traefik3 Basic Auth"
-        usersFile: "/shared/.htpasswd" # be sure to mount the volume through docker-compose.yml
-
     middlewares-authelia:
       forwardAuth:
         address: 'http://authelia:9091/api/verify?rd=https://authelia.{{ env "DOMAINNAME" }}'
