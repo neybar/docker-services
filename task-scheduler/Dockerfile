@@ -27,8 +27,6 @@ RUN echo '#!/bin/sh' > /entrypoint.sh && \
     echo 'echo "DOCKER_HOST: $DOCKER_HOST"' >> /entrypoint.sh && \
     echo 'echo "Scheduled tasks:"' >> /entrypoint.sh && \
     echo 'cat /etc/crontabs/root' >> /entrypoint.sh && \
-    echo '# Run cleanup once on startup' >> /entrypoint.sh && \
-    echo '/usr/local/bin/docker-cleanup.sh' >> /entrypoint.sh && \
     echo '/usr/local/bin/dolt-certs.sh || echo "dolt cert refresh failed"' >> /entrypoint.sh && \
     echo '# Start cron in foreground' >> /entrypoint.sh && \
     echo 'crond -f -l 2' >> /entrypoint.sh && \
