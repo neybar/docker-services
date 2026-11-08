@@ -67,7 +67,7 @@ PR run that edits `.github/` can target the runner.
 
 - Nothing that already references `neybar/docker-services` breaks now. The rename, when it comes, is its own change.
 - `ds-nhh.2` creates `neybar/homelab-site`.
-- The leak guard (`ds-nhh.5.2`) needs an allowlist: the Dolt host name, the docker subnets and the Dolt grant
+- The leak guard (`ds-nhh.5.4`; the scrub was `ds-nhh.5.2`) needs an allowlist: the Dolt host name, the docker subnets and the Dolt grant
   pattern.
 - `ds-nhh.5.5`-`ds-nhh.5.7` move the deploy trigger and the runner; until then, the current deploy path and its rules
   in `AGENTS.md` stay as they are.

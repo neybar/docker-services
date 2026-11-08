@@ -150,18 +150,21 @@ and restarts Traefik when its file rules changed ([docs/DEPLOY.md](docs/DEPLOY.m
 | [docs/decisions/](docs/decisions/) | Architecture decision records |
 | [docs/incidents/](docs/incidents/) | Sanitized incident write-ups |
 | [dolt/README.md](dolt/README.md) | The Dolt server behind Beads |
+| [ansible/](ansible/) | Ansible play and roles that rebuild the host (in progress; rules in `ansible/AGENTS.md`) |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding agents |
 
 ## Roadmap
 
-Planned, not built yet. Tracked in Beads under the epic ds-nhh; the first decision is
-[ADR 0001](docs/decisions/0001-public-private-split.md).
+Tracked in Beads under the epic ds-nhh; the first decision is
+[ADR 0001](docs/decisions/0001-public-private-split.md). Status as of 2026-11-08:
 
-1. **Public platform, private instance.** Move instance values out of this repo into a private one, with secrets in
-   SOPS + age (ds-nhh.3, ds-nhh.5). Deploys then run from the private repo, triggered by a dispatch from this one
-   (ds-nhh.5.7).
-2. **Ansible.** Describe the current host as it is, then prove it with a disaster-recovery drill on a fresh VM
-   (ds-nhh.4).
+1. **Public platform, private instance.** Partly done. The private repo exists; `.env` and the host secrets are
+   SOPS + age encrypted there (ds-nhh.3, [ADR 0012](docs/decisions/0012-sops-age-secrets.md)); host addresses are
+   scrubbed from this repo and CI runs a leak guard (gitleaks plus an instance-data check). Next: deploys run from the
+   private repo, triggered by a dispatch from this one (ds-nhh.5.5 to ds-nhh.5.7).
+2. **Ansible.** Started. The skeleton is in [ansible/](ansible/) (pinned tools, lint CI) and the inventory in the
+   private repo; a `--check` run on the host passes with no roles yet. Next: one role per area, a throwaway test VM
+   (ds-nhh.4.17), then a disaster-recovery drill on a fresh VM (ds-nhh.4).
 3. **Proxmox, then k3s.** A Proxmox host and a k3s cluster managed with GitOps (ds-nhh.7).
 
 ---

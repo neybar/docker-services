@@ -12,7 +12,8 @@ Read alongside `README.md` (services, networks, variables), `env.example` and `d
 ## 1. What is NOT in this repo
 
 Start here, because these are the things a fresh host will not have and
-`docker compose up` will not create. This is the current honest gap list.
+`docker compose up` will not create. This is the current honest gap list. Ansible roles (`ansible/`, epic ds-nhh.4)
+are replacing these rows one at a time; until a row's role lands, its manual step here is the procedure.
 
 | Thing | Where it lives | Status |
 |---|---|---|
