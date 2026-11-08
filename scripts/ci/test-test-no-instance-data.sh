@@ -79,8 +79,7 @@ done
 fresh nomatch
 put f.txt "x $c.1.20 y"
 expect "output omits the matched text" 1 "LEAK"
-[[ "$last" != *"$c.1.20"* ]]
-if [[ $? -eq 0 ]]; then ((pass++)); else
+if [[ "$last" != *"$c.1.20"* ]]; then ((pass++)); else
     ((fail++))
     echo "FAIL: output printed the matched text"
 fi
