@@ -41,7 +41,7 @@ Verified against the current host:
 
 ### Host DNS: leave systemd-resolved at its defaults
 
-NextDNS serves live DNS (host resolvers are `45.90.28.234`/`45.90.30.234`); there
+NextDNS serves live DNS; there
 is no local DNS server in the stack. Keep `/etc/systemd/resolved.conf` at the
 Ubuntu defaults, with the stub listener on (`127.0.0.53:53`): Tailscale manages
 the host's DNS through systemd-resolved. With `DNSStubListener=no` (once needed
@@ -52,7 +52,7 @@ because Pi-hole held `:53`) local lookups failed. Nothing in compose may publish
 
 ## 3. Synology mounts
 
-The NAS is `192.168.0.6`. Ten CIFS shares are mounted on the host; service
+The NAS is `$NAS_IP` (in `.env`). Ten CIFS shares are mounted on the host; service
 configs and all media live on them. Create `/etc/cifspwd` first:
 
 ```
@@ -64,7 +64,7 @@ password=<password>
 Then one `/etc/fstab` line per share, all using the same options:
 
 ```
-//192.168.0.6/<share> /mnt/<share> cifs _netdev,x-systemd.automount,user,vers=3.0,uid=jalance,gid=users,rw,suid,nobrl,file_mode=0600,dir_mode=0700,credentials=/etc/cifspwd 0 0
+//<nas-ip>/<share> /mnt/<share> cifs _netdev,x-systemd.automount,user,vers=3.0,uid=jalance,gid=users,rw,suid,nobrl,file_mode=0600,dir_mode=0700,credentials=/etc/cifspwd 0 0
 ```
 
 Shares: `audiobooks` `backups` `docker` `downloads` `ebooks` `music` `photo`
@@ -80,7 +80,7 @@ retried, and automount mounts the share on first access instead.
 
 On 2026-11-07 all ten mounts failed at boot with `mount error(101): Network is
 unreachable`. `network-online.target` was reached on enp2s0f0's IPv6 address,
-0.24s before DHCPv4 gave it `192.168.0.3`, and the NAS is reached over IPv4.
+0.24s before DHCPv4 gave it its LAN address, and the NAS is reached over IPv4.
 It is a race, so some boots mount fine. Two drop-ins fix it; netplan's own
 drop-in is `/run/.../10-netplan.conf`, so the wait-online one must sort after it:
 

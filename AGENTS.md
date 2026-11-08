@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Home server Docker infrastructure: self-hosted services on Docker Compose behind Traefik, with a CrowdSec WAF and
-Authelia SSO/2FA in front of every web service and a Synology NAS (192.168.0.6) for storage.
+Authelia SSO/2FA in front of every web service and a Synology NAS ($NAS_IP) for storage.
 
 This file is the **root agent instructions** (Claude Code, Codex, Cursor, Gemini): `CLAUDE.md` imports it, `GEMINI.md`
 is a symlink to it, Cursor reads it natively. Human docs: `README.md` (services, variables), `REBUILD.md` (fresh host),
