@@ -1,0 +1,3 @@
+---
+# Run from docker-services/ansible/: ansible-lint
+profile: production

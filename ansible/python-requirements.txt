@@ -1,0 +1,4 @@
+# Controller tools, pinned. CI (lint.yml) and the homelab-site install doc both read this file.
+# ansible-core 2.22 needs Python 3.13; Ubuntu 24.04 ships 3.12, so stay on 2.21 until the host moves.
+ansible-core==2.21.6
+ansible-lint==26.11.0
