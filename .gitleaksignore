@@ -1,0 +1,10 @@
+# gitleaks false positives. One fingerprint (commit:file:rule:line) per entry, each with a comment saying why.
+# Never add a finding without checking it first. A real secret is rotated, not listed here (ds-nhh.1 history policy).
+
+# Vendored upstream crowdsec-bouncer-traefik-plugin, added in the first plugin commit. The value on .traefik.yml line 11
+# is the plugin's published test key: the same string is in upstream's public .traefik.yml. Checked 2026-11-08.
+6000e3a20640d5cc04643a1fef1b94602c2d6174:plugins-local/src/github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/.traefik.yml:generic-api-key:11
+
+# Same commit. README.md line 669 is the upstream documentation example of a PEM block (the body is elided with "..."),
+# also present in upstream's public README. Checked 2026-11-08.
+6000e3a20640d5cc04643a1fef1b94602c2d6174:plugins-local/src/github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/README.md:private-key:669

@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Home server Docker infrastructure: self-hosted services on Docker Compose behind Traefik, with a CrowdSec WAF and
-Authelia SSO/2FA in front of every web service and a Synology NAS (192.168.0.6) for storage.
+Authelia SSO/2FA in front of every web service and a Synology NAS ($NAS_IP) for storage.
 
 This file is the **root agent instructions** (Claude Code, Codex, Cursor, Gemini): `CLAUDE.md` imports it, `GEMINI.md`
 is a symlink to it, Cursor reads it natively. Human docs: `README.md` (services, variables), `REBUILD.md` (fresh host),
@@ -58,7 +58,7 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 | `scripts/validate-traefik.sh`, `scripts/validate-waf.sh`, `scripts/validate-dolt.sh` | live-stack checks |
 | `scripts/dolt-add-db.sh`, `scripts/dolt-prebackup.sh` | new Beads database; nightly Dolt backup (jalance's crontab) |
 | `scripts/lib/` | `host-addrs.sh` (validate test targets only), `nvme-paths.sh` (`NVME_PATHS`), `dolt-nas.sh`, `deploy-target.sh` (deploy.sh target + on-master guard), `validate-common.sh` (`.shellcheckrc` follows its `source`) |
-| `scripts/ci/` | `integration-plan.sh`, `integration-run.sh`, the `test-*.sh` run by `lint.yml` |
+| `scripts/ci/` | `integration-plan.sh`, `integration-run.sh`, the `test-*.sh` run by `lint.yml` (`test-no-instance-data.sh` is the public-repo leak guard; `lint.yml` also runs gitleaks, `.gitleaksignore`) |
 | `.github/workflows/` | `lint.yml` (GitHub-hosted), `integration.yml` (trusted PRs on orcrist, read-only), `deploy.yml` |
 
 ## Validation matrix
@@ -73,6 +73,7 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 | `scripts/deploy.sh` target selection or `scripts/lib/deploy-target.sh` | `./scripts/ci/test-deploy-target.sh` |
 | any `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | `./scripts/ci/test-agent-docs.sh` |
 | any shell script | `shellcheck` (CI runs it at severity `info`) |
+| any tracked file | `./scripts/ci/test-no-instance-data.sh` (private addresses, `/home/<user>/`; exceptions only in `scripts/ci/instance-data-allowlist`, each with a reason) |
 
 `validate-*` probe the **live** stack (deployed code, not your branch) and need orcrist and `.env`: elsewhere skip them
 and say so in the PR (`integration.yml` runs them for trusted PRs). `scripts/ci/test-*.sh` and shellcheck need no docker.

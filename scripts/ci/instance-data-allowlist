@@ -1,0 +1,46 @@
+# Allowlist for scripts/ci/test-no-instance-data.sh. One entry per line: <path-glob> TAB <regex> TAB <reason>.
+# The regex must match the whole flagged token (an address, a /home/<user>/ prefix or a dolt.<host> name). Write a path
+# separator as [/] so the entry does not flag itself.
+# Every entry needs a reason. Do not write the live domain here.
+#
+# Generic ranges (ADR 0001 item 7): they identify nothing specific and recreate the stack identically.
+# The Dolt host name (ADR 0001 item 6) is public by design. Entries with reason "removed by ds-nhh.5.8" are
+# temporary: delete each with the change that removes the data.
+
+# Docker network subnets and gateways (t2_proxy 90, socket_proxy 91)
+README.md	192\.168\.9[01]\.[01]	docker network subnet or gateway, generic (ADR 0001 item 7)
+REBUILD.md	192\.168\.9[01]\.[01]	docker network subnet or gateway, generic (ADR 0001 item 7)
+docker-compose.yml	192\.168\.9[01]\.[01]	docker network subnet or gateway, generic (ADR 0001 item 7)
+
+# Commented static-IP examples in docker-compose.yml
+docker-compose.yml	192\.168\.9[01]\.254	commented static-IP example, generic (ADR 0001 item 7)
+docker-compose.yml	192\.168\.(?:0\.0|255\.255)	comment explaining the /16 range, generic (ADR 0001 item 7)
+
+# Dolt init grant host pattern (LAN) and the docker bridge in its comment
+dolt/README.md	192\.168\.0\.%	Dolt grant host pattern, generic (ADR 0001 item 7)
+dolt/RESTORE.md	192\.168\.0\.%	Dolt grant host pattern, generic (ADR 0001 item 7)
+dolt/init/01-beads-user.sh	192\.168\.0\.%	Dolt grant host pattern, generic (ADR 0001 item 7)
+scripts/dolt-add-db.sh	192\.168\.0\.%	Dolt grant host pattern, generic (ADR 0001 item 7)
+scripts/dolt-prebackup.sh	192\.168\.0\.%	Dolt grant host pattern, generic (ADR 0001 item 7)
+dolt/init/01-beads-user.sh	172\.17\.0\.0	docker default bridge named in a comment, generic (ADR 0001 item 7)
+
+# CGNAT range named in text
+dolt/README.md	100\.64\.0\.0	Tailscale CGNAT range named in text, generic (ADR 0001 item 7)
+dolt/init/01-beads-user.sh	100\.64\.0\.0	Tailscale CGNAT range named in text, generic (ADR 0001 item 7)
+scripts/lib/host-addrs.sh	100\.64\.0\.0	Tailscale CGNAT range named in text, generic (ADR 0001 item 7)
+
+# Dolt host name, public by design (ADR 0001 item 6)
+AGENTS.md	dolt\..+	Dolt host name is public by design (ADR 0001 item 6)
+.beads/metadata.json	dolt\..+	Dolt host name is public by design (ADR 0001 item 6)
+.beads/.gitignore	dolt\.gate\.lock	file name in a comment, not a host
+
+# Temporary: the deploy checkout path
+.github/workflows/deploy.yml	/home/jalance[/]	removed by ds-nhh.5.8
+.github/workflows/integration.yml	/home/jalance[/]	removed by ds-nhh.5.8
+AGENTS.md	/home/jalance[/]	removed by ds-nhh.5.8
+README.md	/home/jalance[/]	removed by ds-nhh.5.8
+REBUILD.md	/home/jalance[/]	removed by ds-nhh.5.8
+docs/DEPLOY.md	/home/jalance[/]	removed by ds-nhh.5.8
+scripts/ci/integration-run.sh	/home/jalance[/]	removed by ds-nhh.5.8
+scripts/deploy.sh	/home/jalance[/]	removed by ds-nhh.5.8
+scripts/migrate-nvme-layout.sh	/home/jalance[/]	removed by ds-nhh.5.8
