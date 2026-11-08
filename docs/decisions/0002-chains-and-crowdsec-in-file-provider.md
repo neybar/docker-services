@@ -46,3 +46,9 @@ therefore did not exist until its first healthcheck passed, and every chained ro
   TCP passthrough routers cannot take an HTTP middleware (Beads `ds-0lu`).
 - `traefik-rules/` is not watched, so a rules change goes live only on a Traefik restart (`scripts/deploy.sh` does
   it on merge; `docs/DEPLOY.md`).
+
+## Update 2026-11-08
+
+`chain-basic-auth` (and its `middlewares-basic-auth`) was removed as unused (Beads ds-2xi): no router used it and the
+passwords file it pointed at was never mounted. Decision 1 now reads `chain-authelia@file` or `chain-no-auth@file`;
+the rest of the decision is unchanged.

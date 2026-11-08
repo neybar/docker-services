@@ -412,7 +412,6 @@ Known gaps are tracked as Beads issues (database `ds`, `bd show <id>`), not here
 | `ds-vhq` | CRS: after tuning, re-enable the `crowdsec-appsec-outofband` ban scenario, then consider `crs-inband` |
 | `ds-zxh` | Authelia upgrade (running 4.21.0), then a local `log_file_path` + CrowdSec file acquisition (needs rotation) |
 | `ds-a6m` | Delete `/mnt/docker/traefik3` (old pre-WAF rules copy, stale January `acme.json`) and the `traefik_acme_config` volume |
-| `ds-2xi` | `chain-basic-auth`/`middlewares-basic-auth` are unused and point at an unmounted `/shared/.htpasswd` |
 | `ds-5gn` | Vestigial Cloudflare `trustedIPs` on the https entrypoint (DNS is not proxied, so `X-Forwarded-For` can be spoofed) |
 | `ds-5fh` | WAN-source ban test (only LAN/hairpinned sources tested; the whitelist was never exercised) |
 | `ds-qix` | Human browser checks of the WAF: Calibre upload, Sonarr/Radarr UI actions, SABnzbd NZB upload |
