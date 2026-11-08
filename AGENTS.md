@@ -52,6 +52,7 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 | `plugins-local/` | vendored bouncer plugin; bump: `plugins-local/README.md` |
 | `task-scheduler/` | cron container: schedule in its `Dockerfile`, jobs in `task-scheduler/scripts/` (times: `README.md` Maintenance) |
 | `dolt/` | Dolt templates, `dolt/README.md`, `dolt/RESTORE.md` |
+| `ansible/` | rebuild roles and `site.yml` (ds-nhh.4); rules in `ansible/AGENTS.md` |
 | `kometa/config.yml.example` | Kometa template (live copy on the NAS) |
 | `scripts/deploy.sh` | the deploy, run by `deploy.yml` from the deploy checkout |
 | `scripts/validate-traefik.sh`, `scripts/validate-waf.sh`, `scripts/validate-dolt.sh` | live-stack checks |
@@ -70,6 +71,7 @@ Significant architecture changes add or supersede an ADR in `docs/decisions/` in
 | NVMe mounts or `scripts/lib/nvme-paths.sh` | `./scripts/ci/test-nvme-paths.sh` |
 | `scripts/ci/integration-plan.sh` | `./scripts/ci/test-integration-plan.sh` |
 | `scripts/deploy.sh` target selection or `scripts/lib/deploy-target.sh` | `./scripts/ci/test-deploy-target.sh` |
+| `ansible/` | from `ansible/`: `ansible-lint`, `ansible-playbook --syntax-check -i localhost, site.yml` |
 | any `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | `./scripts/ci/test-agent-docs.sh` |
 | any shell script | `shellcheck` (CI runs it at severity `info`) |
 | any tracked file | `./scripts/ci/test-no-instance-data.sh` (private addresses, `/home/<user>/`; exceptions only in `scripts/ci/instance-data-allowlist`, each with a reason) |

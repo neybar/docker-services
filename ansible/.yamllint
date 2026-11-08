@@ -1,0 +1,14 @@
+---
+# yamllint config for ansible-lint. The repo wraps at 120; the other settings are the ones ansible-lint requires.
+extends: default
+rules:
+  line-length:
+    max: 120
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  braces:
+    max-spaces-inside: 1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

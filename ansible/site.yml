@@ -1,0 +1,16 @@
+---
+# Rebuild orcrist exactly as it is today (ds-nhh.4). homelab-site's site.yml loads the inventory and secrets, then
+# imports this file. Roles are added here as their issues land, in this order, each tagged with its own name:
+# base, mail, agent_tools, storage, systemd, docker, tailscale, restic, cron, runner, stack.
+- name: Rebuild orcrist
+  hosts: all
+  gather_facts: true
+  pre_tasks:
+    - name: Check the platform matches orcrist
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_version'] == '24.04'
+        fail_msg: These roles reproduce an Ubuntu 24.04 host; anything else needs review first.
+        quiet: true
+  roles: []
