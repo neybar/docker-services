@@ -99,6 +99,8 @@ and say so in the PR (`integration.yml` runs them for trusted PRs). `scripts/ci/
 - NFS (Synology) for configs and media. Local NVMe: `$NVME_DIR/<service>/<role>` (default `/usr/local/docker`, on
   `/`), **not** `LOCALDOCKERDIR` (the repo checkout under `/home`).
 - An empty `$NVME_DIR/plex/config` starts a healthy-looking, empty Plex: restore it from restic first (§6).
+- Host restic exits when `/mnt/backups` is not mounted, before restic's own retries. Keep the systemd retry drop-in
+  (`REBUILD.md` §6). Ansible coverage is Beads `ds-nhh.4.7.1`.
 - NZBHydra2 (H2 wedges on NFSv4 lock loss): keep its nested NVMe mount and `stop_grace_period: 120s` (§5).
 - Every container uses `*default-logging`; do not add an external logrotate.
 - The Traefik access log holds API keys in clear text: never copy it into the repo, a PR or a report; do not loosen

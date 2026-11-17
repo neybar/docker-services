@@ -14,6 +14,7 @@ the fix landed, and the write-up says so.
 | [2026-10-03](2026-10-03-nzbhydra2-h2-on-nfs.md) | NZBHydra2 database wedged about every 9 days (fix date; first recorded June 2026) | Fixed |
 | [2026-11-07](2026-11-07-home-ssd-failure-and-boot-order.md) | `/home` SSD failure and the boot-order outage | Mitigated, hardware cause open |
 | [2026-11-07](2026-11-07-plex-db-not-backed-up.md) | The Plex database was never backed up (found and fixed the same day) | Fixed |
+| [2026-11-17](2026-11-17-restic-backup-nas-timeout.md) | Daily restic backup failed while the NAS was not answering | Mitigated |
 
 ## Template
 

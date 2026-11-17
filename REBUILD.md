@@ -23,7 +23,7 @@ are replacing these rows one at a time; until a row's role lands, its manual ste
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
 | Docker waits for `/home` | `/etc/systemd/system/docker.service.d/wait-for-home.conf` | **not captured**: template in §5 (`/home disk`) |
-| Host backup (restic) | `/etc/restic/`, `/usr/local/sbin/restic-backup`, `restic-{backup,check}.{service,timer}`, `restic-notify@.service` in `/etc/systemd/system/` | **not captured**: what it covers and how to restore are in §6. The repo password file is on the NAS next to the repository, never in this repo. Because restic backs up all of `/`, the uncaptured host files in this table (crontab, drop-ins, `/etc/restic/` itself) are in every snapshot |
+| Host backup (restic) | `/etc/restic/`, `/usr/local/sbin/restic-backup`, `restic-{backup,check}.{service,timer}`, `restic-notify@.service` in `/etc/systemd/system/`, retry drop-in `/etc/systemd/system/restic-backup.service.d/override.conf` | **not captured**: what it covers, how to restore, and the retry drop-in are in §6. Ansible coverage of that drop-in is Beads `ds-nhh.4.7.1`; a rebuild has to keep it. The repo password file is on the NAS next to the repository, never in this repo. Because restic backs up all of `/`, the uncaptured host files in this table (crontab, drop-ins, `/etc/restic/` itself) are in every snapshot |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
 | DDNS for `home.<domain>` (A record; the `*` wildcard CNAMEs to it) | UniFi gateway → Dynamic DNS, service Cloudflare | **not captured** — uses its own "Edit zone DNS" token (the 2020 one, rolled 2026-10-20), separate from Traefik's `CLOUDFLARE_DNS_API_TOKEN`. Namecheap/DNS-O-Matic entries were removed (Cloudflare is authoritative). A new host keeps the same WAN IP only if the gateway stays |
 
@@ -248,12 +248,54 @@ directory a mount is hiding: `sudo mount --bind / /mnt/rootfs`, then
 | Dolt (Beads) data | `$NVME_DIR/dolt/data` (local NVMe) | the live directory is excluded (not crash-consistent). jalance's 03:00 crontab (§1) writes a snapshot to `/mnt/docker/dolt/backups` (NAS), and restic, at 03:30, keeps dated generations of that directory |
 | Dolt config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | yes, Synology; templates in `dolt/` |
 
+### Retry when `/mnt/backups` is not mounted
+
+`/usr/local/sbin/restic-backup` exits before restic starts when `/mnt/backups`
+is not mounted, so restic's own retries never run. On 2026-11-17 a roughly
+three-minute NAS stall failed the 03:44 America/Denver run that way
+([incident](docs/incidents/2026-11-17-restic-backup-nas-timeout.md)). The unit
+on orcrist has this drop-in, verified the same day with `systemctl show`.
+`Restart=on-failure` retries the unit. The failure notification
+(`restic-notify@.service`, `OnFailure`) fires only after those retries are
+exhausted.
+
+At most four starts in any two hours, ten minutes apart. Both sections are
+required. `Restart=` alone does not exhaust: the default start limit is 5
+starts in 10 seconds, and a restart ten minutes later falls outside that
+window, so a mount that stays down would be retried forever and the
+notification would not fire. `StartLimitIntervalSec=2h` makes the four starts
+one burst; once systemd refuses another restart, `OnFailure` runs.
+
+Install it on a rebuild (the rest of the restic units are still uncaptured, §1).
+This is the file verified live on 2026-11-17:
+
+```
+sudo mkdir -p /etc/systemd/system/restic-backup.service.d
+sudo tee /etc/systemd/system/restic-backup.service.d/override.conf >/dev/null <<'EOF'
+[Unit]
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+
+[Service]
+Restart=on-failure
+RestartSec=10min
+EOF
+sudo systemctl daemon-reload
+systemctl cat restic-backup.service   # prints the drop-in
+```
+
+Ansible does not install this yet. Beads `ds-nhh.4.7.1` (the restic role)
+tracks adding the drop-in. Until that role lands, the commands above are the
+procedure. A rebuild that omits the drop-in fails the next short NAS stall on
+the first exit.
+
 ### Restoring from restic
 
 Used for real on 2026-11-07 (restic 0.16.4):
 
 - `/mnt/backups` must be mounted first; the backup service refuses to run
-  without it. Load the environment: `sudo bash -c 'set -a; . /etc/restic/orcrist.env; restic snapshots'`.
+  without it (the retry drop-in is above). Load the environment:
+  `sudo bash -c 'set -a; . /etc/restic/orcrist.env; restic snapshots'`.
 - Restore **as root**. A restore run as your user writes every file as your
   user, which flattens ownership (container state such as `crowdsec/` and
   `acme/` is not owned by jalance). The fix was re-running it with sudo:
