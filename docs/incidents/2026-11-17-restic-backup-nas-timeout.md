@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-17
 - **Status:** Mitigated. The unit retries a failed run; why the NAS stopped answering is unknown
-- **Links:** `REBUILD.md` §6, Beads `ds-nhh.4.7.1`
+- **Links:** `REBUILD.md` §6, Beads `ds-nhh.4.7.1`, PR #71
 
 ## Summary
 
@@ -56,7 +56,7 @@ retry window does not notify, and a mount that stays down still does.
 
 ## Follow-ups
 
-- `REBUILD.md` §6 records the live drop-in and how to install it on a rebuild.
+- PR #71: `REBUILD.md` §6 records the live drop-in and how to install it on a rebuild.
 - Beads `ds-nhh.4.7.1`: add the drop-in to the Ansible restic role so a rebuild keeps it.
 
 ## Open questions
