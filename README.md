@@ -97,10 +97,11 @@ flowchart LR
   NZBHydra2's H2 database never recovers, so its database sits on the NVMe. Plex's library database is local for
   performance; Dolt's data is local too ([REBUILD.md](REBUILD.md) §5).
 - **Backups.** restic backs up the host's whole root filesystem (including every `$NVME_DIR` path and the checkout's
-  gitignored state) to a repository on the NAS, daily, with a weekly `restic check`. The live Dolt directory is
-  excluded; the nightly snapshot on the NAS is included instead. Service configs and media are covered by the NAS
-  itself ([REBUILD.md](REBUILD.md) §6). The restic repository lives on the NAS it backs up; a second copy is a
-  separate open issue.
+  gitignored state) to a repository on the NAS, daily, with a weekly `restic check`. The backup script exits when
+  `/mnt/backups` is not mounted, before restic can retry; a systemd drop-in restarts the unit
+  ([REBUILD.md](REBUILD.md) §6). The live Dolt directory is excluded; the nightly snapshot on the NAS is included
+  instead. Service configs and media are covered by the NAS itself. The restic repository lives on the NAS it backs
+  up; a second copy is a separate open issue.
 
 ### Change flow
 
