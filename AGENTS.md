@@ -129,7 +129,7 @@ writes the block: never edit between its markers. The Claude block is removed on
 - **Server unreachable** (e.g. a cloud VM off the LAN/tailnet): never `bd init` or create a local or embedded database
   (it splits the history). Do the work; note in the PR what to file, claim or close.
 - **Never commit `.beads/issues.jsonl`** (or any JSONL export). The server is the source of truth.
-- **One bd version** on every client (currently 1.3.2): upgrading one can force a schema migration on all.
+- **One bd version** on every client (currently 1.3.4): upgrading one can force a schema migration on all.
 - **Schema migrations** hit every client at once: never migrate the shared schema casually, and never persist
   `BD_ALLOW_REMOTE_MIGRATE`. Procedure: "Schema migrations" in `dolt/README.md`.
 - **Routing**: leaf issues carry tier:/effort:/needs-human/live-risk labels; see `bd memories agent-routing-labels`.

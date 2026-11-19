@@ -67,7 +67,7 @@ restarts dolt only when the cert changed. The restart is `POST /containers/dolt/
 ## bd clients
 
 Upstream is `gastownhall/beads` (`steveyegge/beads` redirects there). Every client stays on the same bd version
-(currently 1.3.2).
+(currently 1.3.4).
 
 - Per user: `BEADS_DOLT_SERVER_{MODE=1,HOST=dolt.<domain>,PORT=3307,USER=beads,TLS=1}` and `BEADS_DOLT_AUTO_START=0`.
   `TLS=1` verifies the cert against `HOST`.
