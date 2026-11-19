@@ -157,8 +157,15 @@ Run as `jalance`:
    sudo ./svc.sh status
    ```
    The runner should show as **Idle** under **Settings > Actions > Runners**.
-5. Test it: **Actions > Deploy > Run workflow** on `master`. With no new commits, the run just
+5. Make systemd restart it. The unit `svc.sh` writes has no `Restart=`, and the runner exits 0 when GitHub
+   refuses its session, so without this it stays dead after a registration loss and deploys queue silently
+   (orcrist, 2026-11-13 to 2026-11-19). Install the drop-in from [REBUILD.md](../REBUILD.md) §2, "GitHub Actions
+   runner: restart always".
+6. Test it: **Actions > Deploy > Run workflow** on `master`. With no new commits, the run just
    reconciles the containers and prints `docker compose ps`.
+
+If the runner shows **Offline** and its log says the registration was deleted, restarting the service does not
+help: re-register it (`config.sh remove`, then step 3 again). Nothing alerts on an offline runner yet (`ds-nhh.10`).
 
 The runner updates itself. To remove it: `sudo ./svc.sh stop && sudo ./svc.sh uninstall && ./config.sh remove --token <TOKEN>`.
 
