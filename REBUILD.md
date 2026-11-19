@@ -22,6 +22,7 @@ are replacing these rows one at a time; until a row's role lands, its manual ste
 | Plex library database | `$NVME_DIR/plex/config` (13GB) | **not backed up anywhere** — see §6 |
 | Minecraft manager | separate repo at `~/games` | own git repo, no remote |
 | Dolt backup cron | jalance's crontab | **not captured**: `CRON_TZ=America/Denver` and `0 3 * * * /home/jalance/Projects/docker-services/scripts/dolt-prebackup.sh >> /home/jalance/.local/state/dolt-prebackup.log 2>&1` (`mkdir -p ~/.local/state` first; jalance is in the `docker` group). Not in task-scheduler: the script needs `docker exec`, and socket-proxy has `EXEC` off on purpose (it would let every socket-proxy client exec into every container) |
+| GitHub Actions runner (runs every deploy) | `~/actions-runner/`, `actions.runner.neybar-docker-services.orcrist.service`, restart drop-in `/etc/systemd/system/actions.runner.neybar-docker-services.orcrist.service.d/restart.conf` | **not captured**: registration is made by hand (`config.sh` with a token from the repo's Settings, Actions, Runners; labels `self-hosted,orcrist`), the drop-in is in §2 (`GitHub Actions runner`) |
 | Docker waits for `/home` | `/etc/systemd/system/docker.service.d/wait-for-home.conf` | **not captured**: template in §5 (`/home disk`) |
 | Host backup (restic) | `/etc/restic/`, `/usr/local/sbin/restic-backup`, `restic-{backup,check}.{service,timer}`, `restic-notify@.service` in `/etc/systemd/system/`, retry drop-in `/etc/systemd/system/restic-backup.service.d/override.conf` | **not captured**: what it covers, how to restore, and the retry drop-in are in §6. The repo password file is on the NAS next to the repository, never in this repo. Because restic backs up all of `/`, the uncaptured host files in this table (crontab, drop-ins, `/etc/restic/` itself) are in every snapshot |
 | Dolt live config | `/mnt/docker/dolt/{servercfg,init}` (NAS) | templates in `dolt/`; copied by hand, not deployed by a merge (public repo). `certs/` is written by `dolt-certs.sh`, `backups/` by the cron above |
@@ -48,6 +49,30 @@ Ubuntu defaults, with the stub listener on (`127.0.0.53:53`): Tailscale manages
 the host's DNS through systemd-resolved. With `DNSStubListener=no` (once needed
 because Pi-hole held `:53`) local lookups failed. Nothing in compose may publish
 `:53`.
+
+### GitHub Actions runner: restart always
+
+`deploy.yml` and `integration.yml` run on a self-hosted runner (labels `self-hosted`, `orcrist`). A merge to `master`
+deploys only while it is online. The unit that `svc.sh install` writes has no `Restart=`, and the runner exits 0 when
+GitHub refuses its session, so systemd treats that as a clean stop and never restarts it. On 2026-11-13 that left the
+runner dead for five days and jobs sat queued. This drop-in, installed on orcrist, restarts it after any exit; the unit is
+already `enabled`, so it starts at boot:
+
+```
+U=actions.runner.neybar-docker-services.orcrist.service
+sudo mkdir -p /etc/systemd/system/$U.d
+printf '[Unit]\nWants=network-online.target\nStartLimitIntervalSec=0\n\n[Service]\nRestart=always\nRestartSec=30\n' |
+  sudo tee /etc/systemd/system/$U.d/restart.conf
+sudo systemctl daemon-reload
+```
+
+Checked by killing the service's processes while idle: systemd restarts it after 30 seconds. After an unclean kill
+GitHub keeps the old session for a minute or two, so the log shows `Conflict. Retrying until reconnected` before
+`Listening for Jobs`. A reboot was not tested.
+
+`Restart=always` does not fix a deleted registration: it retries every 30 seconds and fails the same way. If
+`gh api repos/<owner>/<repo>/actions/runners` shows the runner offline and the log says the registration was deleted,
+re-register it (`config.sh remove`, then `config.sh --url … --token … --name orcrist` with the same labels).
 
 ---
 
